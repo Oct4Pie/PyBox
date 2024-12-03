@@ -43,7 +43,7 @@ export default defineConfig({
       allow: ['../..', 'node_modules/@wasmer/sdk/dist']
     }
   },
-  base: '/pybox',
+  // base: '/pybox',
 
   build: {
     cssMinify: 'esbuild',
