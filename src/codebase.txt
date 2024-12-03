@@ -1,0 +1,4027 @@
+<== ./App.tsx ==>
+import React, { useState, useEffect, useRef, Suspense } from 'react'
+import {
+  Flex,
+  Center,
+  Text,
+  IconButton,
+  Tooltip,
+  useDisclosure,
+  useBreakpointValue,
+  useColorMode
+} from '@chakra-ui/react'
+import { ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons'
+import { HotKeys } from 'react-hotkeys'
+
+import Spinner from './components/Spinner'
+import usePyodide from './hooks/usePyodide'
+import { useFilesystem } from './context/FilesystemContext'
+
+import { keyMap, createHandlers } from './config/keyboardShortcuts'
+import { useEditorState } from './hooks/useEditorState'
+import { useThemeColors } from './theme/colors'
+import { useHandlers } from './hooks/useHandlers'
+import TopNavigationBar from './components/TopNavigationBar'
+
+const PackageManagerDrawer = React.lazy(
+  () => import('./components/PackageManagerDrawer')
+)
+const MainLayout = React.lazy(() => import('./components/MainLayout'))
+
+const App: React.FC = () => {
+  const { colorMode, toggleColorMode } = useColorMode()
+  const isMobile = useBreakpointValue({ base: true, md: false }) || false
+  const { bgColor, panelBgColor } = useThemeColors()
+
+  const {
+    openFiles,
+    setOpenFiles,
+    activeFile,
+    setActiveFile,
+    unsavedFiles,
+    markFileAsUnsaved,
+    markFileAsSaved
+  } = useEditorState()
+
+  const [output, setOutput] = useState<string>('')
+  const [isRunning, setIsRunning] = useState<boolean>(false)
+  const [isBottomPanelVisible, setIsBottomPanelVisible] =
+    useState<boolean>(true)
+  const [activeBottomPanel, setActiveBottomPanel] = useState<string>('Output')
+
+  const { isLoading, error, runCode, installPackage, installedPackages } =
+    usePyodide()
+  const { refreshFS } = useFilesystem()
+  const { isOpen, onOpen, onClose } = useDisclosure()
+
+  const editorRef = useRef<any>(null)
+
+  const {
+    handleRunCode,
+    handleFileSelect,
+    handleInstallPackage,
+    handleAddNewFile,
+    handleCloseFile,
+    toggleBottomPanel,
+    handleManualSave,
+    handleSaveFile,
+    clearOutput,
+    handleRenameFile
+  } = useHandlers({
+    activeFile,
+    setActiveFile,
+    openFiles,
+    setOpenFiles,
+    markFileAsSaved,
+    markFileAsUnsaved,
+    refreshFS,
+    installPackage,
+    runCode,
+    setOutput,
+    setIsRunning,
+    isBottomPanelVisible,
+    setIsBottomPanelVisible,
+    setActiveBottomPanel,
+    unsavedFiles,
+    editorRef
+  })
+
+  const handlers = createHandlers(
+    handleRunCode,
+    handleAddNewFile,
+    toggleBottomPanel,
+    handleManualSave,
+    onOpen
+  )
+
+  const [fileExplorerSize, setFileExplorerSize] = useState<number>(() => {
+    return parseInt(localStorage.getItem('fileExplorerSize') || '20')
+  })
+
+  if (isLoading) {
+    return (
+      <Center h='100vh' bg={bgColor}>
+        <Spinner />
+        <Text ml={2}>Loading PyBox...</Text>
+      </Center>
+    )
+  }
+
+  if (error) {
+    return (
+      <Center h='100vh' bg={bgColor}>
+        <Text color='red.500'>Error loading Pyodide: {error.message}</Text>
+      </Center>
+    )
+  }
+
+  return (
+    <HotKeys keyMap={keyMap} handlers={handlers}>
+      <Flex h='100vh' direction='column' bg={bgColor} overflow='hidden'>
+        {/* Top Navigation Bar */}
+        <TopNavigationBar
+          isMobile={isMobile}
+          colorMode={colorMode}
+          toggleColorMode={toggleColorMode}
+          onOpen={onOpen}
+          handleRunCode={handleRunCode}
+          handleManualSave={handleManualSave}
+          isRunning={isRunning}
+          unsavedFiles={unsavedFiles}
+          activeFile={activeFile}
+        />
+
+        {/* Main Layout */}
+        <Suspense fallback={<Spinner />}>
+          <MainLayout
+            fileExplorerSize={fileExplorerSize}
+            setFileExplorerSize={setFileExplorerSize}
+            panelBgColor={panelBgColor}
+            activeFile={activeFile}
+            openFiles={openFiles}
+            setActiveFile={setActiveFile}
+            handleFileSelect={handleFileSelect}
+            unsavedFiles={unsavedFiles}
+            handleCloseFile={handleCloseFile}
+            handleRenameFile={handleRenameFile}
+            handleAddNewFile={handleAddNewFile}
+            markFileAsUnsaved={markFileAsUnsaved}
+            handleSaveFile={handleSaveFile}
+            isBottomPanelVisible={isBottomPanelVisible}
+            setIsBottomPanelVisible={setIsBottomPanelVisible}
+            activeBottomPanel={activeBottomPanel}
+            setActiveBottomPanel={setActiveBottomPanel}
+            output={output}
+            clearOutput={clearOutput}
+            editorRef={editorRef}
+          />
+        </Suspense>
+
+        {/* Toggle Bottom Panel Button */}
+        <Tooltip
+          label='Toggle Bottom Panel (Ctrl+B)'
+          aria-label='Toggle Bottom Panel'
+        >
+          <IconButton
+            icon={
+              isBottomPanelVisible ? <ChevronDownIcon /> : <ChevronUpIcon />
+            }
+            size='md'
+            position='fixed'
+            bottom={4}
+            right={4}
+            onClick={toggleBottomPanel}
+            colorScheme='teal'
+            isRound
+            shadow='md'
+            _hover={{ transform: 'scale(1.1)', bg: 'teal.600' }}
+            transition='transform 0.2s, background-color 0.3s'
+            aria-label='Toggle Bottom Panel'
+          />
+        </Tooltip>
+
+        {/* Package Manager Drawer */}
+        <Suspense fallback={<Spinner />}>
+          <PackageManagerDrawer
+            isOpen={isOpen}
+            onClose={onClose}
+            onInstall={handleInstallPackage}
+            installedPackages={installedPackages}
+          />
+        </Suspense>
+      </Flex>
+    </HotKeys>
+  )
+}
+
+export default App
+
+<== ./main.tsx ==>
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { ChakraProvider, extendTheme, ColorModeScript } from '@chakra-ui/react'
+import App from './App'
+import { FilesystemProvider } from './context/FilesystemContext'
+import ErrorBoundary from './components/ErrorBoundary'
+
+const theme = extendTheme({
+  config: {
+    initialColorMode: 'dark',
+    useSystemColorMode: true
+  },
+  styles: {
+    global: {
+      'html, body, #root': {
+        height: '100%',
+        margin: '0',
+        padding: '0',
+        overflow: 'hidden'
+      }
+    }
+  }
+})
+
+const Root = () => {
+  return (
+
+      <FilesystemProvider>
+        <App />
+      </FilesystemProvider>
+
+  )
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root')!)
+root.render(
+  <React.StrictMode>
+    <ChakraProvider theme={theme}>
+      <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+      <Root />
+    </ChakraProvider>
+  </React.StrictMode>
+)
+
+<== ./context/FilesystemContext.tsx ==>
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { Directory } from '@wasmer/sdk'
+import {
+  initializeSharedDirectory,
+  getSharedDirectory
+} from '../sharedFileSystem'
+import { useToast, Center, Spinner, Text } from '@chakra-ui/react'
+
+interface FilesystemContextProps {
+  sharedDir: Directory
+  refreshFS: () => Promise<void>
+}
+
+const FilesystemContext = createContext<FilesystemContextProps | undefined>(
+  undefined
+)
+
+export const FilesystemProvider: React.FC<{ children: React.ReactNode }> = ({
+  children
+}) => {
+  const [sharedDir, setSharedDir] = useState<Directory | null>(null)
+  const toast = useToast()
+
+  useEffect(() => {
+    let isMounted = true
+
+    const initFS = async () => {
+      try {
+        const dir = await initializeSharedDirectory()
+        if (isMounted) {
+          setSharedDir(dir)
+          toast({
+            title: 'Filesystem Initialized',
+            status: 'success',
+            duration: 2000,
+            isClosable: true
+          })
+        }
+      } catch (err: any) {
+        console.error('Failed to initialize shared Directory:', err)
+        if (isMounted) {
+          toast({
+            title: 'Filesystem Initialization Error',
+            description: err.message,
+            status: 'error',
+            duration: 5000,
+            isClosable: true
+          })
+        }
+      }
+    }
+
+    initFS()
+
+    return () => {
+      isMounted = false
+    }
+  }, [toast])
+
+  const refreshFS = async () => {
+    try {
+      const dir = getSharedDirectory()
+      setSharedDir(dir)
+    } catch (err: any) {
+      console.error('Error refreshing filesystem:', err)
+      toast({
+        title: 'Filesystem Refresh Error',
+        description: err.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true
+      })
+    }
+  }
+
+  if (!sharedDir) {
+    return (
+      <Center h='100vh' bg='gray.100'>
+        <Spinner size='xl' />
+        <Text ml={2}>Initializing Filesystem...</Text>
+      </Center>
+    )
+  }
+
+  return (
+    <FilesystemContext.Provider value={{ sharedDir, refreshFS }}>
+      {children}
+    </FilesystemContext.Provider>
+  )
+}
+
+export const useFilesystem = (): FilesystemContextProps => {
+  const context = useContext(FilesystemContext)
+  if (!context) {
+    throw new Error('useFilesystem must be used within a FilesystemProvider')
+  }
+  return context
+}
+
+<== ./config/keyboardShortcuts.ts ==>
+export const keyMap = {
+    RUN_CODE: 'ctrl+r, cmd+r',
+    NEW_FILE: 'ctrl+n, cmd+n',
+    TOGGLE_BOTTOM_PANEL: 'ctrl+b, cmd+b',
+    SAVE_FILE: 'ctrl+s, cmd+s',
+    OPEN_PACKAGE_MANAGER: 'ctrl+shift+p, cmd+shift+p',
+  };
+  
+  export const createHandlers = (
+    handleRunCode: () => void,
+    handleAddNewFile: () => void,
+    toggleBottomPanel: () => void,
+    handleManualSave: () => void,
+    onOpen: () => void
+  ) => ({
+    RUN_CODE: (event?: KeyboardEvent) => {
+      if (event) event.preventDefault();
+      handleRunCode();
+    },
+    NEW_FILE: (event?: KeyboardEvent) => {
+      if (event) event.preventDefault();
+      handleAddNewFile();
+    },
+    TOGGLE_BOTTOM_PANEL: (event?: KeyboardEvent) => {
+      if (event) event.preventDefault();
+      toggleBottomPanel();
+    },
+    SAVE_FILE: (event?: KeyboardEvent) => {
+      if (event) event.preventDefault();
+      handleManualSave();
+    },
+    OPEN_PACKAGE_MANAGER: (event?: KeyboardEvent) => {
+      if (event) event.preventDefault();
+      onOpen();
+    },
+  });
+  
+<== ./wasmerInit.ts ==>
+import { init } from '@wasmer/sdk';
+// path to the Wasm module
+//@ts-ignore
+import WasmModule from '@wasmer/sdk/wasm?url';
+
+let wasmerInitialized = false;
+
+export const initializeWasmer = async () => {
+  if (!wasmerInitialized) {
+    await await init({ module: WasmModule, sdkUrl: `${location.origin}/sdk/index.mjs` });
+    wasmerInitialized = true;
+    console.log('Wasmer SDK initialized');
+  }
+};
+
+<== ./sharedFileSystem.ts ==>
+import { Directory } from '@wasmer/sdk'
+import { initializeWasmer } from './wasmerInit'
+
+let sharedDirectory: Directory | null = null
+
+export const initializeSharedDirectory = async (): Promise<Directory> => {
+  if (!sharedDirectory) {
+    try {
+      await initializeWasmer()
+      sharedDirectory = new Directory()
+      console.log('Shared Directory initialized')
+
+      try {
+        await sharedDirectory.createDir('/runner')
+        console.log("Created '/runner' directory")
+      } catch (error: any) {
+        if (error.message.includes('File exists')) {
+          console.log("'/runner' directory already exists")
+        } else {
+          throw error
+        }
+      }
+
+      try {
+        await sharedDirectory.readFile('/runner/main.py')
+        console.log("'/runner/main.py' already exists")
+      } catch (error: any) {
+        if (
+          error.message.includes('No such file or directory') ||
+          error.message.includes('entry not found')
+        ) {
+          const initialContent = `# main.py\nprint("Hello from PyBox!")\n`
+          await sharedDirectory.writeFile(
+            '/runner/main.py',
+            new TextEncoder().encode(initialContent)
+          )
+          console.log("Created initial '/runner/main.py'")
+        } else {
+          throw error
+        }
+      }
+    } catch (err) {
+      console.error('Error initializing shared Directory:', err)
+      throw err
+    }
+  } else {
+    console.log('Shared Directory already initialized')
+  }
+  return sharedDirectory
+}
+
+export const getSharedDirectory = (): Directory => {
+  if (!sharedDirectory) {
+    throw new Error(
+      'Shared Directory is not initialized. Call initializeSharedDirectory first.'
+    )
+  }
+  return sharedDirectory
+}
+
+export const renameFile = async (
+  oldPath: string,
+  newPath: string
+): Promise<void> => {
+  if (!sharedDirectory) {
+    throw new Error('Shared Directory is not initialized.')
+  }
+  try {
+    const content = await sharedDirectory.readFile(oldPath)
+    await sharedDirectory.writeFile(newPath, content)
+    await sharedDirectory.removeFile(oldPath)
+    console.log(`Renamed file from ${oldPath} to ${newPath}`)
+  } catch (err) {
+    console.error(`Error renaming file from ${oldPath} to ${newPath}:`, err)
+    throw err
+  }
+}
+
+export const renameDir = async (
+  oldPath: string,
+  newPath: string
+): Promise<void> => {
+  if (!sharedDirectory) {
+    throw new Error('Shared Directory is not initialized.')
+  }
+  try {
+    const entries = await sharedDirectory.readDir(oldPath)
+
+    await sharedDirectory.createDir(newPath)
+
+    for (const entry of entries) {
+      const oldEntryPath = `${oldPath}/${entry.name}`
+      const newEntryPath = `${newPath}/${entry.name}`
+      if (entry.type === 'file') {
+        const content = await sharedDirectory.readFile(oldEntryPath)
+        await sharedDirectory.writeFile(newEntryPath, content)
+      } else if (entry.type === 'dir') {
+        await renameDir(oldEntryPath, newEntryPath)
+      }
+    }
+
+    await sharedDirectory.removeDir(oldPath)
+    console.log(`Renamed directory from ${oldPath} to ${newPath}`)
+  } catch (err) {
+    console.error(
+      `Error renaming directory from ${oldPath} to ${newPath}:`,
+      err
+    )
+    throw err
+  }
+}
+
+<== ./components/Settings.tsx ==>
+import React from 'react'
+import { VStack, FormControl, FormLabel, Switch, Box } from '@chakra-ui/react'
+
+interface SettingsProps {
+  isAutosaveEnabled: boolean
+  setIsAutosaveEnabled: (value: boolean) => void
+}
+
+const Settings: React.FC<SettingsProps> = ({
+  isAutosaveEnabled,
+  setIsAutosaveEnabled
+}) => {
+  const handleAutosaveToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsAutosaveEnabled(e.target.checked)
+  }
+
+  return (
+    <VStack align='start' spacing={4}>
+      <FormControl display='flex' alignItems='center'>
+        <FormLabel htmlFor='autosave' mb='0'>
+          Autosave
+        </FormLabel>
+        <Switch
+          id='autosave'
+          isChecked={isAutosaveEnabled}
+          onChange={handleAutosaveToggle}
+          colorScheme='teal'
+        />
+      </FormControl>
+
+      {/* Add more settings here as needed */}
+      <Box>{/* Placeholder for additional settings */}</Box>
+    </VStack>
+  )
+}
+
+export default Settings
+
+<== ./components/PackageManagerDrawer.tsx ==>
+import React, { Suspense } from 'react'
+import {
+  Drawer,
+  DrawerOverlay,
+  DrawerCloseButton,
+  DrawerBody,
+  DrawerContent,
+  useColorModeValue
+} from '@chakra-ui/react'
+import Spinner from './Spinner'
+const PackageManager = React.lazy(() => import('./PackageManager'))
+
+interface PackageManagerDrawerProps {
+  isOpen: boolean
+  onClose: () => void
+  onInstall: (packageName: string) => void
+  installedPackages: string[]
+}
+
+const PackageManagerDrawer: React.FC<PackageManagerDrawerProps> = ({
+  isOpen,
+  onClose,
+  onInstall,
+  installedPackages
+}) => {
+  return (
+    <Drawer
+      isOpen={isOpen}
+      placement='right'
+      onClose={onClose}
+      size='md'
+      isFullHeight
+    >
+      <DrawerOverlay />
+      <DrawerContent>
+        <DrawerCloseButton />
+        <DrawerBody bgColor={useColorModeValue('gray.50', 'gray.800')}>
+          <Suspense fallback={<Spinner />}>
+            <PackageManager
+              onInstall={onInstall}
+              installedPackages={installedPackages}
+            />
+          </Suspense>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
+  )
+}
+
+export default PackageManagerDrawer
+
+<== ./components/Tab.tsx ==>
+import React, { useState } from 'react'
+import {
+  Flex,
+  Text,
+  Input,
+  IconButton,
+  Tooltip,
+  Box,
+  useColorModeValue
+} from '@chakra-ui/react'
+import { CloseIcon, EditIcon } from '@chakra-ui/icons'
+import { FaDotCircle } from 'react-icons/fa'
+
+interface TabProps {
+  filename: string
+  isActive: boolean
+  onClick: () => void
+  onClose: () => void
+  onRename: (oldName: string, newName: string) => void
+  hasUnsavedChanges: boolean
+}
+
+const Tab: React.FC<TabProps> = React.memo(
+  ({ filename, isActive, onClick, onClose, onRename, hasUnsavedChanges }) => {
+    const [renaming, setRenaming] = useState<boolean>(false)
+    const [newName, setNewName] = useState<string>(filename)
+
+    const handleRename = () => {
+      if (renaming && newName.trim() && newName !== filename) {
+        onRename(filename, newName.trim())
+      }
+      setRenaming(!renaming)
+    }
+
+    // light and dark modes
+    const activeBg = useColorModeValue('teal.300', 'teal.700')
+    const inactiveBg = useColorModeValue('gray.200', 'gray.700')
+    const hoverBg = useColorModeValue('teal.200', 'teal.600')
+    const activeBorderColor = useColorModeValue('teal.500', 'teal.300')
+    const unsavedColor = useColorModeValue('red.600', 'red.500')
+
+    return (
+      <Flex
+        align='center'
+        px='4'
+        py='2'
+        bg={isActive ? activeBg : inactiveBg}
+        borderBottom={isActive ? `2px solid ${activeBorderColor}` : 'none'}
+        _hover={{ bg: hoverBg, cursor: 'pointer' }}
+        onClick={onClick}
+        transition='background 0.2s'
+        position='relative'
+      >
+        {renaming ? (
+          <Input
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onBlur={handleRename}
+            onKeyPress={e => e.key === 'Enter' && handleRename()}
+            size='sm'
+            autoFocus
+          />
+        ) : (
+          <Flex align='center'>
+            <Text mr='2' isTruncated>
+              {filename}
+            </Text>
+            {hasUnsavedChanges && (
+              <Box
+                as={FaDotCircle}
+                color={unsavedColor}
+                ml={1}
+                w='6px'
+                h='6px'
+                borderRadius='full'
+              />
+            )}
+          </Flex>
+        )}
+        <Tooltip label='Rename Tab'>
+          <IconButton
+            icon={<EditIcon />}
+            size='xs'
+            onClick={e => {
+              e.stopPropagation()
+              handleRename()
+            }}
+            aria-label='Rename Tab'
+            variant='ghost'
+            ml={2}
+          />
+        </Tooltip>
+        <Tooltip label='Close Tab'>
+          <IconButton
+            icon={<CloseIcon />}
+            size='xs'
+            onClick={e => {
+              e.stopPropagation()
+              onClose()
+            }}
+            aria-label='Close Tab'
+            variant='ghost'
+            ml={1}
+          />
+        </Tooltip>
+      </Flex>
+    )
+  }
+)
+
+export default Tab
+
+<== ./components/PackageManager.tsx ==>
+import React, { useState } from 'react'
+import {
+  Box,
+  Heading,
+  Input,
+  IconButton,
+  HStack,
+  useColorModeValue,
+  Tooltip,
+  List,
+  ListItem,
+  Text
+} from '@chakra-ui/react'
+import { RiInstallFill } from 'react-icons/ri'
+interface PackageManagerProps {
+  onInstall: (packageName: string) => void
+  installedPackages: string[]
+}
+
+const PackageManager: React.FC<PackageManagerProps> = ({
+  onInstall,
+  installedPackages
+}) => {
+  const [packageName, setPackageName] = useState('')
+
+  const handleInstall = () => {
+    if (packageName.trim()) {
+      onInstall(packageName.trim())
+      setPackageName('')
+    }
+  }
+
+  const bgColor = useColorModeValue('gray.50', 'gray.800')
+
+  return (
+    <Box h='100%' bg={bgColor} p='4' overflowY='auto'>
+      <Heading size='md' mb='4'>
+        Package Manager
+      </Heading>
+      <HStack mb='4'>
+        <Input
+          value={packageName}
+          onChange={e => setPackageName(e.target.value)}
+          placeholder='Package name (e.g., numpy)'
+          onKeyPress={e => e.key === 'Enter' && handleInstall()}
+          size='sm'
+        />
+        <Tooltip label='Install Package'>
+          <IconButton
+            icon={<RiInstallFill />}
+            onClick={handleInstall}
+            aria-label='Install Package'
+            size='sm'
+            colorScheme='teal'
+          />
+        </Tooltip>
+      </HStack>
+      {installedPackages && installedPackages.length > 0 && (
+        <Box>
+          <Heading size='sm' mb='2'>
+            Installed Packages
+          </Heading>
+          <List spacing='1'>
+            {installedPackages.map(pkg => (
+              <ListItem key={pkg}>
+                <Text fontSize='sm'>{pkg}</Text>
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+export default PackageManager
+
+<== ./components/Editor.tsx ==>
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle
+} from 'react'
+import AceEditor from 'react-ace'
+import { useFilesystem } from '../context/FilesystemContext'
+import { useToast, Center, useColorMode } from '@chakra-ui/react'
+import { useHotkeys } from 'react-hotkeys-hook'
+
+import 'ace-builds/src-noconflict/mode-python'
+import 'ace-builds/src-noconflict/theme-one_dark'
+import 'ace-builds/src-noconflict/snippets/python'
+import 'ace-builds/src-noconflict/ext-language_tools'
+import 'ace-builds/src-noconflict/ext-searchbox'
+import 'ace-builds/src-noconflict/theme-chrome'
+import 'ace-builds/src-noconflict/ace'
+import ace from 'ace-builds/src-noconflict/ace'
+
+ace.config.set('basePath', '/')
+
+interface EditorProps {
+  activeFile: string
+  markFileAsUnsaved: (filename: string) => void
+}
+
+const Editor = forwardRef((props: EditorProps, ref) => {
+  const { activeFile, markFileAsUnsaved } = props
+  const { sharedDir } = useFilesystem()
+  const [value, setValue] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const { colorMode } = useColorMode()
+  const toast = useToast()
+
+  // Load file content
+  const loadFileContent = useCallback(async () => {
+    if (!activeFile) return
+    setLoading(true)
+    const filePath = `runner/${activeFile}`
+    console.log(`Loading file: ${filePath}`)
+    try {
+      const contentBytes = await sharedDir.readFile(filePath)
+      const content = new TextDecoder().decode(contentBytes)
+      setValue(content)
+      setHasUnsavedChanges(false)
+      console.log(`File loaded successfully: ${filePath}`)
+    } catch (err: any) {
+      // If the file doesn't exist, create it
+      if (err.message.includes('No such file or directory')) {
+        await sharedDir.writeFile(filePath, new TextEncoder().encode(''))
+        setValue('')
+        setHasUnsavedChanges(false)
+        console.log(`Created new file: ${filePath}`)
+      } else {
+        console.error('Error loading file:', err)
+        toast({
+          title: 'Error Loading File',
+          description: err.message,
+          status: 'error',
+          duration: 5000,
+          isClosable: true
+        })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [activeFile, sharedDir, toast])
+
+  useEffect(() => {
+    loadFileContent()
+  }, [loadFileContent, activeFile])
+
+  const saveToFile = useCallback(async () => {
+    const filePath = `runner/${activeFile}`
+    console.log(`Attempting to save file: ${filePath}`)
+    try {
+      try {
+        await sharedDir.removeFile(filePath)
+        console.log(`Existing file deleted: ${filePath}`)
+      } catch (err) {
+        console.log(`File does not exist, no need to delete: ${filePath}`)
+      }
+
+      await sharedDir.writeFile(filePath, new TextEncoder().encode(value))
+      console.log(`File saved successfully: ${filePath}`)
+
+      const savedContentBytes = await sharedDir.readFile(filePath)
+      const decodedContent = new TextDecoder().decode(savedContentBytes)
+      console.log('decodedContent:', decodedContent)
+      console.log('value:', value)
+      if (decodedContent !== value) {
+        throw new Error('File content does not match after saving.')
+      }
+
+      setHasUnsavedChanges(false)
+
+      toast({
+        title: 'File Saved',
+        description: `File '${activeFile}' has been saved.`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+    } catch (err: any) {
+      console.error('Error writing file:', err)
+      toast({
+        title: 'Save Error',
+        description: err.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true
+      })
+    }
+  }, [activeFile, sharedDir, value, toast])
+
+  useImperativeHandle(ref, () => ({
+    saveFile: async () => {
+      await saveToFile()
+    }
+  }))
+
+  const handleManualSave = useCallback(async () => {
+    if (hasUnsavedChanges) {
+      await saveToFile()
+    } else {
+      toast({
+        title: 'No changes to save.',
+        status: 'info',
+        duration: 2000,
+        isClosable: true
+      })
+    }
+  }, [hasUnsavedChanges, saveToFile, toast])
+
+  useHotkeys(
+    'ctrl+s, cmd+s',
+    event => {
+      event.preventDefault()
+      handleManualSave()
+    },
+    [handleManualSave]
+  )
+
+  const handleChange = (newValue: string) => {
+    setValue(newValue)
+    if (!hasUnsavedChanges) {
+      setHasUnsavedChanges(true)
+      markFileAsUnsaved(activeFile)
+      console.log(`File marked as having unsaved changes: ${activeFile}`)
+    }
+  }
+
+  if (loading) {
+    return <Center h='100%'>Loading Editor...</Center>
+  }
+
+  return (
+    <AceEditor
+      mode='python'
+      theme={colorMode === 'dark' ? 'one_dark' : 'chrome'}
+      onChange={handleChange}
+      value={value}
+      name='python-editor'
+      editorProps={{ $blockScrolling: true }}
+      width='100%'
+      height='100%'
+      fontSize={14}
+      showPrintMargin={false}
+      showGutter={true}
+      highlightActiveLine={true}
+      wrapEnabled={true}
+      setOptions={{
+        enableBasicAutocompletion: true,
+        enableLiveAutocompletion: true,
+        enableSnippets: true,
+        showLineNumbers: true,
+        tabSize: 4,
+        useWorker: true
+      }}
+    />
+  )
+})
+
+export default Editor
+
+<== ./components/FileSystem.tsx ==>
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  Box,
+  HStack,
+  Heading,
+  Input,
+  IconButton,
+  List,
+  ListItem,
+  Text,
+  useColorModeValue,
+  Tooltip,
+  useToast,
+  Collapse
+} from '@chakra-ui/react'
+import { AddIcon, EditIcon, DeleteIcon, DownloadIcon } from '@chakra-ui/icons'
+import {
+  FaFolderOpen,
+  FaFolder,
+  FaFileAlt,
+  FaDotCircle,
+  FaFileDownload
+} from 'react-icons/fa'
+
+import { TiExport } from 'react-icons/ti'
+import { useFilesystem } from '../context/FilesystemContext'
+import { renameFile, renameDir } from '../sharedFileSystem'
+import JSZip from 'jszip'
+import dayjs from 'dayjs'
+
+interface FileSystemProps {
+  onFileSelect: (filename: string) => void
+  activeFile: string
+  unsavedFiles: Set<string>
+}
+
+interface FileSystemEntry {
+  name: string
+  path: string
+  type: 'file' | 'dir'
+  children?: FileSystemEntry[]
+}
+
+const FileSystem: React.FC<FileSystemProps> = ({
+  onFileSelect,
+  activeFile,
+  unsavedFiles
+}) => {
+  const { sharedDir, refreshFS } = useFilesystem()
+  const [fileSystemTree, setFileSystemTree] = useState<FileSystemEntry[]>([])
+  const [newName, setNewName] = useState('')
+  const [renamingItem, setRenamingItem] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
+  const [creatingInDirectory, setCreatingInDirectory] = useState<string | null>(
+    null
+  )
+  const [newItemName, setNewItemName] = useState('')
+  const toast = useToast()
+
+  const readDirRecursive = useCallback(
+    async (dirPath: string): Promise<FileSystemEntry[]> => {
+      try {
+        const entries = await sharedDir.readDir(dirPath)
+        const result: FileSystemEntry[] = []
+
+        for (const entry of entries) {
+          const entryPath = `${dirPath}/${entry.name}`
+          if (entry.type === 'dir') {
+            const children = await readDirRecursive(entryPath)
+            result.push({
+              name: entry.name,
+              path: entryPath,
+              type: 'dir',
+              children
+            })
+          } else if (entry.type === 'file') {
+            result.push({ name: entry.name, path: entryPath, type: 'file' })
+          }
+        }
+        return result
+      } catch (err: any) {
+        console.error('Error reading directory:', err)
+        toast({
+          title: 'Error Reading Directory',
+          description: err.message,
+          status: 'error',
+          duration: 3000,
+          isClosable: true
+        })
+        return []
+      }
+    },
+    [sharedDir, toast]
+  )
+
+  const updateFileList = useCallback(async () => {
+    const tree = await readDirRecursive('runner')
+    setFileSystemTree(tree)
+  }, [readDirRecursive])
+
+  useEffect(() => {
+    updateFileList()
+    const interval = setInterval(() => {
+      updateFileList()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [updateFileList])
+
+  const ensureParentDirectoriesExist = async (path: string) => {
+    const pathSegments = path.split('/')
+    pathSegments.pop()
+    let currentPath = ''
+    for (const segment of pathSegments) {
+      if (segment === '') continue
+      currentPath += '/' + segment
+      try {
+        await sharedDir.createDir(currentPath)
+      } catch (err) {}
+    }
+  }
+
+  const handleCreate = async () => {
+    const trimmedName = newName.trim()
+    if (!trimmedName) {
+      toast({
+        title: 'Name cannot be empty.',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true
+      })
+      return
+    }
+
+    const isDirectory = trimmedName.endsWith('/')
+    const finalName = isDirectory ? trimmedName.slice(0, -1) : trimmedName
+
+    const path = `runner/${finalName}`
+
+    try {
+      await ensureParentDirectoriesExist(path)
+
+      if (isDirectory) {
+        await sharedDir.createDir(path)
+        toast({
+          title: `Directory '${finalName}' created.`,
+          status: 'success',
+          duration: 2000,
+          isClosable: true
+        })
+      } else {
+        await sharedDir.writeFile(path, new TextEncoder().encode(''))
+        toast({
+          title: `File '${finalName}' created.`,
+          status: 'success',
+          duration: 2000,
+          isClosable: true
+        })
+      }
+      setNewName('')
+      await refreshFS()
+      updateFileList()
+    } catch (err: any) {
+      console.error('Error creating:', err)
+      toast({
+        title: 'Error creating item.',
+        description: err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
+  }
+
+  const saveAs = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  const handleCreateInDirectory = async (parentPath: string) => {
+    const trimmedName = newItemName.trim()
+    if (!trimmedName) {
+      toast({
+        title: 'Name cannot be empty.',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true
+      })
+      return
+    }
+
+    const isDirectory = trimmedName.endsWith('/')
+    const finalName = isDirectory ? trimmedName.slice(0, -1) : trimmedName
+
+    const path = `${parentPath}/${finalName}`
+
+    try {
+      await ensureParentDirectoriesExist(path)
+
+      if (isDirectory) {
+        await sharedDir.createDir(path)
+        toast({
+          title: `Directory '${finalName}' created.`,
+          status: 'success',
+          duration: 2000,
+          isClosable: true
+        })
+      } else {
+        await sharedDir.writeFile(path, new TextEncoder().encode(''))
+        toast({
+          title: `File '${finalName}' created.`,
+          status: 'success',
+          duration: 2000,
+          isClosable: true
+        })
+      }
+      setNewItemName('')
+      setCreatingInDirectory(null)
+      await refreshFS()
+      updateFileList()
+    } catch (err: any) {
+      console.error('Error creating:', err)
+      toast({
+        title: 'Error creating item.',
+        description: err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
+  }
+
+  const handleRename = (path: string) => {
+    setRenamingItem(path)
+    setRenameValue(path.split('/').pop() || '')
+  }
+
+  const handleRenameSubmit = async () => {
+    if (!renamingItem) return
+    const trimmedNewName = renameValue.trim()
+    const oldName = renamingItem.split('/').pop() || ''
+    if (!trimmedNewName || trimmedNewName === oldName) {
+      setRenamingItem(null)
+      setRenameValue('')
+      return
+    }
+
+    const isDirectory = renamingItem.endsWith('/')
+    const parentPath = renamingItem.substring(0, renamingItem.lastIndexOf('/'))
+    const newPath = `${parentPath}/${trimmedNewName}`
+
+    try {
+      await ensureParentDirectoriesExist(newPath)
+
+      if (isDirectory) {
+        await renameDir(renamingItem, newPath)
+      } else {
+        await renameFile(renamingItem, newPath)
+      }
+
+      setRenamingItem(null)
+      setRenameValue('')
+      toast({
+        title: `Renamed to '${trimmedNewName}'.`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+
+      await refreshFS()
+      updateFileList()
+
+      if (activeFile === renamingItem) {
+        onFileSelect(newPath)
+      }
+    } catch (err: any) {
+      console.error('Error renaming:', err)
+      toast({
+        title: 'Error renaming.',
+        description: err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
+  }
+
+  const handleDelete = async (path: string) => {
+    try {
+      const isFile = path.split('/').pop()?.includes('.') ?? false
+      if (isFile) {
+        await sharedDir.removeFile(path)
+      } else {
+        await deleteDirectoryRecursively(path)
+      }
+
+      await refreshFS()
+      updateFileList()
+
+      if (activeFile === path) {
+        onFileSelect('')
+      }
+
+      toast({
+        title: `Removed '${path}'.`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+    } catch (err: any) {
+      console.error('Error deleting:', err)
+      toast({
+        title: 'Error deleting.',
+        description: err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
+  }
+
+  const deleteDirectoryRecursively = async (dirPath: string) => {
+    const entries = await sharedDir.readDir(dirPath)
+    for (const entry of entries) {
+      const entryPath = `${dirPath}/${entry.name}`
+      if (entry.type === 'dir') {
+        await deleteDirectoryRecursively(entryPath)
+      } else {
+        await sharedDir.removeFile(entryPath)
+      }
+    }
+    await sharedDir.removeDir(dirPath)
+  }
+
+  const toggleDirectory = (dirPath: string) => {
+    const newExpandedDirs = new Set(expandedDirs)
+    if (newExpandedDirs.has(dirPath)) {
+      newExpandedDirs.delete(dirPath)
+    } else {
+      newExpandedDirs.add(dirPath)
+    }
+    setExpandedDirs(newExpandedDirs)
+  }
+
+  const handleFileSelectInternal = (path: string) => {
+    const relativePath = path.startsWith('runner/')
+      ? path.slice('runner/'.length)
+      : path
+    onFileSelect(relativePath)
+  }
+
+  const handleDragStart = (event: React.DragEvent, entry: FileSystemEntry) => {
+    event.stopPropagation()
+    event.dataTransfer.setData('application/json', JSON.stringify(entry))
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = async (
+    event: React.DragEvent,
+    destination: FileSystemEntry
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const data = event.dataTransfer.getData('application/json')
+    const sourceEntry: FileSystemEntry = JSON.parse(data)
+
+    if (sourceEntry.path === destination.path) {
+      return
+    }
+
+    const isSubPath = (parentPath: string, childPath: string) => {
+      if (childPath === parentPath) return true
+      return childPath.startsWith(parentPath + '/')
+    }
+
+    if (isSubPath(sourceEntry.path, destination.path)) {
+      toast({
+        title: 'Invalid Move',
+        description: 'Cannot move a directory into itself or its subdirectory.',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true
+      })
+      return
+    }
+
+    const destinationPath =
+      destination.type === 'dir'
+        ? destination.path
+        : destination.path.substring(0, destination.path.lastIndexOf('/'))
+
+    const newPath = `${destinationPath}/${sourceEntry.name}`
+
+    try {
+      if (sourceEntry.type === 'file') {
+        await renameFile(sourceEntry.path, newPath)
+      } else {
+        await renameDir(sourceEntry.path, newPath)
+      }
+
+      toast({
+        title: 'Item Moved',
+        description: `Moved '${sourceEntry.name}' to '${destinationPath}'`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true
+      })
+
+      await refreshFS()
+      updateFileList()
+    } catch (err: any) {
+      console.error('Error moving item:', err)
+      toast({
+        title: 'Error Moving Item',
+        description: err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
+  }
+
+  const handleDragEnter = (event: React.DragEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  const handleDragLeave = (event: React.DragEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  const handleFileUpload = async (files: FileList, path: string) => {
+    for (const file of Array.from(files)) {
+      const filePath = `${path}/${file.name}`
+
+      await ensureParentDirectoriesExist(filePath)
+
+      const content = await file.arrayBuffer()
+      await sharedDir.writeFile(filePath, new Uint8Array(content))
+    }
+    toast({
+      title: 'Files Uploaded',
+      description: 'Your files have been uploaded successfully.',
+      status: 'success',
+      duration: 2000,
+      isClosable: true
+    })
+    await refreshFS()
+    updateFileList()
+  }
+
+  const handleDirectoryUpload = async (
+    items: DataTransferItemList,
+    path: string
+  ) => {
+    const traverseFileTree = async (entry: any, currentPath: string) => {
+      if (entry.isFile) {
+        const file = await new Promise<File>((resolve, reject) =>
+          entry.file(resolve, reject)
+        )
+        const filePath = `${currentPath}/${file.name}`
+
+        await ensureParentDirectoriesExist(filePath)
+
+        const content = await file.arrayBuffer()
+        await sharedDir.writeFile(filePath, new Uint8Array(content))
+      } else if (entry.isDirectory) {
+        const dirPath = `${currentPath}/${entry.name}`
+
+        try {
+          await sharedDir.createDir(dirPath)
+        } catch (err) {}
+
+        const dirReader = entry.createReader()
+        let entries: any[] = []
+
+        const readEntries = async () => {
+          return new Promise<any[]>((resolve, reject) =>
+            dirReader.readEntries(resolve, reject)
+          )
+        }
+
+        let batch: any[]
+        do {
+          batch = await readEntries()
+          entries = entries.concat(batch)
+        } while (batch.length > 0)
+
+        for (const childEntry of entries) {
+          await traverseFileTree(childEntry, dirPath)
+        }
+      }
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry()
+      if (entry) {
+        await traverseFileTree(entry, path)
+      }
+    }
+
+    toast({
+      title: 'Directories Uploaded',
+      description: 'Your directories have been uploaded successfully.',
+      status: 'success',
+      duration: 2000,
+      isClosable: true
+    })
+    await refreshFS()
+    updateFileList()
+  }
+
+  const handleDropUpload = async (event: React.DragEvent, path: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const files = event.dataTransfer.files
+    const items = event.dataTransfer.items
+
+    if (items.length > 0) {
+      const hasDirectory = Array.from(items).some(item => {
+        const entry = item.webkitGetAsEntry()
+        return entry && entry.isDirectory
+      })
+
+      if (hasDirectory) {
+        await handleDirectoryUpload(items, path)
+      } else {
+        await handleFileUpload(files, path)
+      }
+    }
+  }
+
+  const handleExport = async (entry: FileSystemEntry) => {
+    try {
+      if (entry.type === 'file') {
+        const content = await sharedDir.readFile(entry.path)
+        const blob = new Blob([content])
+        saveAs(blob, entry.name)
+
+        toast({
+          title: 'Export Successful',
+          description: `${entry.name} has been exported.`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true
+        })
+      } else if (entry.type === 'dir') {
+        const zip = new JSZip()
+
+        const addToZip = async (
+          zipFolder: JSZip,
+          dirEntry: FileSystemEntry
+        ) => {
+          if (dirEntry.type === 'file') {
+            const content = await sharedDir.readFile(dirEntry.path)
+            zipFolder.file(dirEntry.name, content)
+          } else if (dirEntry.type === 'dir' && dirEntry.children) {
+            const folder = zipFolder.folder(dirEntry.name)!
+            for (const child of dirEntry.children) {
+              await addToZip(folder, child)
+            }
+          }
+        }
+
+        await addToZip(zip, entry)
+
+        const content = await zip.generateAsync({ type: 'blob' })
+        saveAs(content, `${entry.name}.zip`)
+
+        toast({
+          title: 'Export Successful',
+          description: `Directory '${entry.name}' has been exported as a ZIP.`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true
+        })
+      }
+    } catch (err: any) {
+      console.error('Error exporting entry:', err)
+      toast({
+        title: 'Export Failed',
+        description: err.message || 'An error occurred during export.',
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
+  }
+
+  const handleExportAll = async () => {
+    const zip = new JSZip()
+
+    const addToZip = async (zipFolder: JSZip, dirPath: string) => {
+      const entries = await sharedDir.readDir(dirPath)
+      for (const entry of entries) {
+        const entryPath = `${dirPath}/${entry.name}`
+        if (entry.type === 'file') {
+          const content = await sharedDir.readFile(entryPath)
+          zipFolder.file(entryPath.replace('runner/', ''), content)
+        } else if (entry.type === 'dir') {
+          const folder = zip.folder(entryPath.replace('runner/', ''))!
+          await addToZip(folder, entryPath)
+        }
+      }
+    }
+
+    try {
+      await addToZip(zip, 'runner')
+
+      const content = await zip.generateAsync({ type: 'blob' })
+      const timestamp = dayjs().format('YYYY-MM-DD_HH-mm-ss')
+      const filename = `PyBox_${timestamp}.zip`
+      saveAs(content, filename)
+
+      toast({
+        title: 'Export Successful',
+        description: `All files have been exported as ${filename}`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true
+      })
+    } catch (err: any) {
+      console.error('Error exporting all files:', err)
+      toast({
+        title: 'Export Failed',
+        description: err.message || 'An error occurred while exporting files.',
+        status: 'error',
+        duration: 3000,
+        isClosable: true
+      })
+    }
+  }
+
+  const renderFileSystemEntry = (entry: FileSystemEntry) => {
+    const isDir = entry.type === 'dir'
+    const isExpanded = expandedDirs.has(entry.path)
+
+    const entryName = entry.name
+    const displayEntryName =
+      renamingItem === entry.path ? (
+        <Input
+          value={renameValue}
+          onChange={e => setRenameValue(e.target.value)}
+          onBlur={handleRenameSubmit}
+          onKeyPress={e => e.key === 'Enter' && handleRenameSubmit()}
+          size='sm'
+          autoFocus
+        />
+      ) : (
+        <Text
+          isTruncated
+          flex='1'
+          ml='2'
+          onClick={() =>
+            isDir
+              ? toggleDirectory(entry.path)
+              : handleFileSelectInternal(entry.path)
+          }
+          cursor={isDir ? 'pointer' : 'default'}
+          _hover={{ textDecoration: isDir ? 'underline' : 'none' }}
+        >
+          {entryName}
+        </Text>
+      )
+
+    const renderAddItemInput = (parentPath: string) => (
+      <HStack mt='2' pl='4'>
+        <Input
+          value={newItemName}
+          onChange={e => setNewItemName(e.target.value)}
+          placeholder='new_file.py or new_directory/'
+          onKeyPress={e =>
+            e.key === 'Enter' && handleCreateInDirectory(parentPath)
+          }
+          size='sm'
+        />
+        <Tooltip label='Create File or Directory'>
+          <IconButton
+            icon={<AddIcon />}
+            onClick={() => handleCreateInDirectory(parentPath)}
+            aria-label='Create File or Directory'
+            size='sm'
+            colorScheme='teal'
+          />
+        </Tooltip>
+      </HStack>
+    )
+
+    const icon = isDir ? (isExpanded ? FaFolderOpen : FaFolder) : FaFileAlt
+
+    return (
+      <ListItem
+        key={entry.path}
+        p='2'
+        bg={activeFile === entry.path ? 'teal.600' : 'transparent'}
+        borderRadius='md'
+        _hover={{ bg: 'teal.700', cursor: 'pointer' }}
+        transition='background 0.2s'
+        draggable
+        onDragStart={e => handleDragStart(e, entry)}
+        onDragOver={handleDragOver}
+        onDrop={e => handleDrop(e, entry)}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDoubleClick={() => isDir && toggleDirectory(entry.path)}
+        onClick={() => !isDir && handleFileSelectInternal(entry.path)}
+        onDropCapture={e => handleDropUpload(e, entry.path)}
+      >
+        <HStack spacing='1'>
+          <Box as={icon} />
+          {displayEntryName}
+          {unsavedFiles.has(entry.path) && (
+            <Box
+              as={FaDotCircle}
+              color='red.500'
+              ml={1}
+              w='6px'
+              h='6px'
+              borderRadius='full'
+            />
+          )}
+          {isDir && (
+            <Tooltip label='Add File/Directory'>
+              <IconButton
+                icon={<AddIcon />}
+                size='xs'
+                onClick={e => {
+                  e.stopPropagation()
+                  setCreatingInDirectory(entry.path)
+                }}
+                aria-label='Add File or Directory'
+                variant='ghost'
+              />
+            </Tooltip>
+          )}
+          <Tooltip label='Rename'>
+            <IconButton
+              icon={<EditIcon />}
+              size='xs'
+              onClick={e => {
+                e.stopPropagation()
+                handleRename(entry.path)
+              }}
+              aria-label='Rename'
+              variant='ghost'
+            />
+          </Tooltip>
+          <Tooltip label='Delete'>
+            <IconButton
+              icon={<DeleteIcon />}
+              size='xs'
+              onClick={e => {
+                e.stopPropagation()
+                handleDelete(entry.path)
+              }}
+              aria-label='Delete'
+              variant='ghost'
+            />
+          </Tooltip>
+          <Tooltip label='Download'>
+            <IconButton
+              icon={<DownloadIcon />}
+              size='xs'
+              onClick={e => {
+                e.stopPropagation()
+                handleExport(entry)
+              }}
+              aria-label='Download'
+              variant='ghost'
+            />
+          </Tooltip>
+        </HStack>
+        {creatingInDirectory === entry.path && renderAddItemInput(entry.path)}
+        {isDir && (
+          <Collapse in={isExpanded} animateOpacity>
+            <Box mt='2' pl='4'>
+              <List spacing='2'>
+                {entry.children &&
+                  entry.children.map(child => renderFileSystemEntry(child))}
+              </List>
+            </Box>
+          </Collapse>
+        )}
+      </ListItem>
+    )
+  }
+
+  const bgColor = useColorModeValue('gray.100', 'gray.900')
+
+  interface HTMLInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+    webkitdirectory?: string
+  }
+
+  return (
+    <Box
+      w='100%'
+      bg={bgColor}
+      p='4'
+      borderRight='1px'
+      borderColor='gray.600'
+      overflowY='auto'
+      h='100vh'
+      onDragOver={handleDragOver}
+      onDrop={e => handleDropUpload(e, 'runner')}
+    >
+      <HStack mb='4' justifyContent='space-between'>
+        <HStack>
+          <Box as={FaFolderOpen} />
+          <Heading size='md'>File Explorer</Heading>
+          <Tooltip label='Upload'>
+            <IconButton
+              icon={<FaFileDownload />}
+              aria-label='Upload'
+              size='sm'
+              variant='ghost'
+              onClick={() => {
+                document.getElementById('file-upload-input')?.click()
+              }}
+            />
+          </Tooltip>
+          <input
+            id='file-upload-input'
+            type='file'
+            style={{ display: 'none' }}
+            multiple
+            ref={input => input && (input.webkitdirectory = true)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              const files = e.target.files
+              if (files) {
+                handleFileUpload(files, 'runner')
+              }
+            }}
+          />
+        </HStack>
+        <Tooltip label='Export All Files'>
+          <IconButton
+            icon={<TiExport size={20} />}
+            aria-label='Export All Files'
+            size='sm'
+            variant='ghost'
+            onClick={handleExportAll}
+          />
+        </Tooltip>
+      </HStack>
+      <HStack mb='4'>
+        <Input
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          placeholder='new_file.py or new_directory/'
+          onKeyPress={e => e.key === 'Enter' && handleCreate()}
+          size='sm'
+        />
+        <Tooltip label='Create File or Directory'>
+          <IconButton
+            icon={<AddIcon />}
+            onClick={handleCreate}
+            aria-label='Create File or Directory'
+            size='sm'
+            colorScheme='teal'
+          />
+        </Tooltip>
+      </HStack>
+      <List spacing='2'>
+        {fileSystemTree.map(entry => renderFileSystemEntry(entry))}
+      </List>
+    </Box>
+  )
+}
+
+export default FileSystem
+
+<== ./components/Terminal.tsx ==>
+import React, { useEffect, useRef, useState } from 'react'
+import { Box, Button, Flex, Icon, useColorMode } from '@chakra-ui/react'
+import { FiTerminal } from 'react-icons/fi'
+import { Terminal as XTerm } from 'xterm'
+import { FitAddon } from 'xterm-addon-fit'
+import 'xterm/css/xterm.css'
+import { Wasmer, init } from '@wasmer/sdk'
+//@ts-ignore
+import WasmModule from '@wasmer/sdk/wasm?url'
+import { useFilesystem } from '../context/FilesystemContext'
+
+const encoder = new TextEncoder()
+
+const Terminal: React.FC = () => {
+  const terminalRef = useRef<HTMLDivElement>(null)
+  const termRef = useRef<XTerm | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const { sharedDir } = useFilesystem()
+  const { colorMode } = useColorMode()
+  const [instance, setInstance] = useState<any>(null)
+  const [termI, setTermI] = useState<any>(null)
+  const [terminalLoaded, setTerminalLoaded] = useState(false)
+
+  const terminalTheme = {
+    background: colorMode === 'dark' ? '#2D3748' : 'white',
+    foreground: colorMode === 'dark' ? '#E2E8F0' : '#2D3748',
+    cursor:
+      colorMode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)',
+    selectionBackground:
+      colorMode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'
+  }
+
+  useEffect(() => {
+    if (termI) {
+      termI.options.theme = terminalTheme
+    }
+  }, [colorMode])
+
+  useEffect(() => {
+    if (!terminalLoaded) return
+
+    const handleResize = () => {
+      fitAddonRef.current?.fit()
+    }
+
+    const runTerminal = async () => {
+      try {
+        await init({
+          module: WasmModule,
+          sdkUrl: `${location.origin}/sdk/index.mjs`
+        })
+        console.log('Wasmer SDK initialized')
+
+        const term = new XTerm({
+          cursorBlink: true,
+          convertEol: true,
+          fontFamily: '"Fira Code", monospace',
+          fontSize: 13,
+          theme: terminalTheme
+        })
+
+        setTermI(term)
+        const fitAddon = new FitAddon()
+        term.loadAddon(fitAddon)
+        term.open(terminalRef.current!)
+        fitAddon.fit()
+        term.focus()
+
+        term.element!.style.padding = '16px'
+
+        const pkg = await Wasmer.fromRegistry('sharrattj/bash')
+        console.log('Bash package fetched from Wasmer registry')
+
+        const instance = await pkg.entrypoint!.run({
+          args: [
+            '-c',
+            'echo "root:x:0:0:root:/root:/bin/bash" > /etc/passwd && echo "runner" > /etc/hostname && echo "127.0.0.1 runner" >> /etc/hosts && bash'
+          ],
+          mount: { '/home': sharedDir },
+          cwd: '/home',
+          env: {
+            HOME: '/home',
+            PS1: '\\u@runner:\\w\\$ '
+          }
+        })
+        console.log(
+          "Bash package running with sharedDir mounted at '.' and cwd set to 'home'"
+        )
+
+        connectStreams(instance, term)
+        setInstance(instance)
+
+        termRef.current = term
+        fitAddonRef.current = fitAddon
+
+        window.addEventListener('resize', handleResize)
+      } catch (err: any) {
+        console.error('Error initializing Terminal:', err)
+        termRef.current?.writeln(`\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`)
+      }
+    }
+
+    runTerminal()
+
+    return () => {
+      termRef.current?.dispose()
+      fitAddonRef.current?.dispose()
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [terminalLoaded, sharedDir])
+
+  const connectStreams = (instance: any, term: XTerm) => {
+    let stdin = instance.stdin?.getWriter()
+
+    term.onData(data => {
+      let command = term.buffer.active
+        .getLine(term.buffer.active.cursorY)
+        ?.translateToString(true)
+        .trim()
+
+      command = command!.replace(/^bash-\d+\.\d+#\s*/, '')
+
+      if (command === 'clear') {
+        term.clear()
+        stdin?.write(encoder.encode('\x03'))
+        stdin?.write(encoder.encode('\n'))
+      } else {
+        stdin?.write(encoder.encode(data))
+      }
+    })
+
+    instance.stdout
+      .pipeTo(
+        new WritableStream({
+          write: (chunk: Uint8Array) => {
+            const output = new TextDecoder().decode(chunk)
+            term.write(output)
+          }
+        })
+      )
+      .catch((err: any) => {
+        console.error('Error piping stdout:', err)
+      })
+
+    instance.stderr
+      .pipeTo(
+        new WritableStream({
+          write: (chunk: Uint8Array) => {
+            const output = new TextDecoder().decode(chunk)
+            term.write(output)
+          }
+        })
+      )
+      .catch((err: any) => {
+        console.error('Error piping stderr:', err)
+      })
+  }
+
+  return (
+    <>
+      {!terminalLoaded ? (
+        <Flex
+          direction='row'
+          w='100%'
+          h='300px'
+          align='center'
+          justify='center'
+        >
+          <Button onClick={() => setTerminalLoaded(true)}>
+            <Icon as={FiTerminal} mr={2} />
+            Load Terminal
+          </Button>
+        </Flex>
+      ) : (
+        <Box
+          ref={terminalRef}
+          style={{
+            width: '100%',
+            height: '350px',
+            overflowY: 'auto'
+          }}
+          borderRadius='lg'
+          overflow='clip'
+        />
+      )}
+    </>
+  )
+}
+
+export default Terminal
+
+<== ./components/MainLayout.tsx ==>
+import React, { Suspense } from 'react'
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
+import { Box } from '@chakra-ui/react'
+import Spinner from './Spinner'
+import FileSystem from './FileSystem'
+
+const EditorAndBottomPanels = React.lazy(() => import('./EditorPanels'))
+
+interface MainLayoutProps {
+  fileExplorerSize: number
+  setFileExplorerSize: (size: number) => void
+  panelBgColor: string
+  activeFile: string
+  openFiles: string[]
+  setActiveFile: (file: string) => void
+  handleFileSelect: (file: string) => void
+  unsavedFiles: Set<string>
+  handleCloseFile: (file: string) => void
+  handleRenameFile: (oldName: string, newName: string) => void
+  handleAddNewFile: () => void
+  markFileAsUnsaved: (file: string) => void
+  handleSaveFile: () => Promise<void>
+  isBottomPanelVisible: boolean
+  setIsBottomPanelVisible: (visible: boolean) => void
+  activeBottomPanel: string
+  setActiveBottomPanel: (panel: string) => void
+  output: string
+  clearOutput: () => void
+  editorRef: React.RefObject<any>
+}
+
+const MainLayout: React.FC<MainLayoutProps> = ({
+  fileExplorerSize,
+  setFileExplorerSize,
+  panelBgColor,
+  activeFile,
+  openFiles,
+  setActiveFile,
+  handleFileSelect,
+  unsavedFiles,
+  handleCloseFile,
+  handleRenameFile,
+  handleAddNewFile,
+  markFileAsUnsaved,
+  handleSaveFile,
+  isBottomPanelVisible,
+  setIsBottomPanelVisible,
+  activeBottomPanel,
+  setActiveBottomPanel,
+  output,
+  clearOutput,
+  editorRef
+}) => {
+  return (
+    <PanelGroup direction='horizontal' style={{ flex: 1, display: 'flex' }}>
+      {/* File Explorer Panel */}
+      <Panel
+        defaultSize={fileExplorerSize}
+        minSize={15}
+        onResize={size => setFileExplorerSize(size)}
+        className='panel-sidebar'
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: panelBgColor,
+          overflow: 'hidden'
+        }}
+      >
+        <Box h='100%' overflowY='auto' p={2} transition='background-color 0.3s'>
+          <Suspense fallback={<Spinner />}>
+            <FileSystem
+              onFileSelect={handleFileSelect}
+              activeFile={activeFile}
+              unsavedFiles={unsavedFiles}
+            />
+          </Suspense>
+        </Box>
+      </Panel>
+
+      {/* Resize Handle */}
+      <PanelResizeHandle
+        className='resize-handle'
+        style={{
+          cursor: 'col-resize',
+          backgroundColor: panelBgColor,
+          width: '5px',
+          transition: 'background-color 0.3s'
+        }}
+      />
+
+      {/* Main Content Panel */}
+      <Panel
+        className='panel-main'
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}
+      >
+        <Suspense fallback={<Spinner />}>
+          <EditorAndBottomPanels
+            panelBgColor={panelBgColor}
+            activeFile={activeFile}
+            openFiles={openFiles}
+            setActiveFile={setActiveFile}
+            handleCloseFile={handleCloseFile}
+            handleRenameFile={handleRenameFile}
+            handleAddNewFile={handleAddNewFile}
+            unsavedFiles={unsavedFiles}
+            markFileAsUnsaved={markFileAsUnsaved}
+            handleSaveFile={handleSaveFile}
+            isBottomPanelVisible={isBottomPanelVisible}
+            setIsBottomPanelVisible={setIsBottomPanelVisible}
+            activeBottomPanel={activeBottomPanel}
+            setActiveBottomPanel={setActiveBottomPanel}
+            output={output}
+            clearOutput={clearOutput}
+            editorRef={editorRef}
+          />
+        </Suspense>
+      </Panel>
+    </PanelGroup>
+  )
+}
+
+export default MainLayout
+
+<== ./components/Output.tsx ==>
+import React, { useState } from 'react'
+import {
+  Box,
+  Flex,
+  Heading,
+  IconButton,
+  Collapse,
+  useColorModeValue,
+  Tooltip,
+  useColorMode,
+  Text
+} from '@chakra-ui/react'
+import { DeleteIcon, ChevronUpIcon, ChevronDownIcon } from '@chakra-ui/icons'
+
+interface OutputProps {
+  output: string
+  clearOutput: () => void
+}
+
+const Output: React.FC<OutputProps> = ({ output, clearOutput }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  const bgColor = useColorModeValue('gray.100', 'gray.800')
+
+  return (
+    <Box h='100%' bg={bgColor} p='4' overflowY='auto'>
+      <Flex justifyContent='space-between' alignItems='center' mb='2'>
+        <Heading size='md'>Output</Heading>
+        <Flex>
+          <Tooltip label='Clear Output'>
+            <IconButton
+              icon={<DeleteIcon />}
+              size='sm'
+              onClick={clearOutput}
+              aria-label='Clear Output'
+              variant='ghost'
+            />
+          </Tooltip>
+          <Tooltip label={isCollapsed ? 'Expand' : 'Collapse'}>
+            <IconButton
+              icon={isCollapsed ? <ChevronUpIcon /> : <ChevronDownIcon />}
+              size='sm'
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              aria-label='Toggle Output'
+              variant='ghost'
+            />
+          </Tooltip>
+        </Flex>
+      </Flex>
+      <Collapse in={!isCollapsed} animateOpacity>
+        <Box
+          as='pre'
+          fontFamily='monospace'
+          fontSize='sm'
+          whiteSpace='pre-wrap'
+          overflow='auto'
+          bg={useColorModeValue('gray.200', 'gray.700')}
+          maxHeight='300px'
+          p='2'
+          borderRadius='md'
+          h='full'
+          color='white'
+        >
+          <Text
+          color={useColorModeValue('gray.800', 'white')}
+          fontFamily='monospace'
+          decoration={'bold'}
+          >{output}</Text>
+
+        </Box>
+      </Collapse>
+    </Box>
+  )
+}
+
+export default Output
+
+<== ./components/BreadcrumbNavigation.tsx ==>
+import React from 'react'
+import {
+  Breadcrumb as ChakraBreadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink
+} from '@chakra-ui/react'
+
+interface BreadcrumbNavigationProps {
+  activeFile: string
+}
+
+const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
+  activeFile
+}) => {
+  const filePath = ['home', 'runner', activeFile]
+
+  return (
+    <ChakraBreadcrumb spacing='8px' separator='/'>
+      {filePath.map((segment, index) => (
+        <BreadcrumbItem key={index}>
+          <BreadcrumbLink href='#'>{segment}</BreadcrumbLink>
+        </BreadcrumbItem>
+      ))}
+    </ChakraBreadcrumb>
+  )
+}
+
+export default BreadcrumbNavigation
+
+<== ./components/EditorPanels.tsx ==>
+import React, { Suspense, useEffect, useState } from 'react'
+import {
+  Flex,
+  Box,
+  Tabs,
+  Tooltip,
+  TabList,
+  TabPanels,
+  TabPanel,
+  Tab as ChakraTab,
+  IconButton,
+  Text,
+  Center,
+  Icon,
+  useColorModeValue
+} from '@chakra-ui/react'
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
+import Spinner from './Spinner'
+import Output from './Output'
+import Tab from './Tab'
+import {
+  FaChartBar,
+  FaCode,
+  FaImage,
+  FaTerminal,
+  FaPython
+} from 'react-icons/fa'
+import { CloseIcon, AddIcon } from '@chakra-ui/icons'
+
+const Editor = React.lazy(() => import('./Editor'))
+const PythonRepl = React.lazy(() => import('./PythonRepl'))
+const Terminal = React.lazy(() => import('./Terminal'))
+
+interface EditorAndBottomPanelsProps {
+  panelBgColor: string
+  activeFile: string
+  openFiles: string[]
+  setActiveFile: (file: string) => void
+  handleCloseFile: (file: string) => void
+  handleRenameFile: (oldName: string, newName: string) => void
+  handleAddNewFile: () => void
+  unsavedFiles: Set<string>
+  markFileAsUnsaved: (file: string) => void
+  handleSaveFile: () => Promise<void>
+  isBottomPanelVisible: boolean
+  setIsBottomPanelVisible: (visible: boolean) => void
+  activeBottomPanel: string
+  setActiveBottomPanel: (panel: string) => void
+  output: string
+  clearOutput: () => void
+  editorRef: React.RefObject<any>
+}
+
+const EditorAndBottomPanels: React.FC<EditorAndBottomPanelsProps> = ({
+  panelBgColor,
+  activeFile,
+  openFiles,
+  setActiveFile,
+  handleCloseFile,
+  handleRenameFile,
+  handleAddNewFile,
+  unsavedFiles,
+  markFileAsUnsaved,
+  handleSaveFile,
+  isBottomPanelVisible,
+  setIsBottomPanelVisible,
+  activeBottomPanel,
+  setActiveBottomPanel,
+  output,
+  clearOutput,
+  editorRef
+}) => {
+  const [plotContent, setPlotContent] = useState<string | null>(null)
+
+  useEffect(() => {
+    const plotContainer = document.getElementById('plot-container')
+    ;(document as any).pyodideMplTarget = plotContainer
+    if (plotContent && plotContent.indexOf('matplotlib_') !== -1) {
+      plotContainer!.innerHTML = plotContent
+    }
+  }, [])
+
+  useEffect(() => {
+    const plotContainer = (document as any).pyodideMplTarget
+    if (plotContainer) {
+      if (plotContent && plotContent.indexOf('matplotlib_') !== -1) {
+        plotContainer.innerHTML = plotContent
+      }
+
+      const observer = new MutationObserver(() => {
+        const lastChild = Array.from(plotContainer.children).at(-1)
+        const content = lastChild ? lastChild.innerHTML.trim() : ''
+        if (!content) {
+          setPlotContent(null)
+        } else {
+          if (content.indexOf('matplotlib_') !== -1) {
+            setPlotContent(content)
+          }
+        }
+      })
+
+      observer.observe(plotContainer, { childList: true, subtree: true })
+
+      return () => observer.disconnect()
+    }
+  }, [plotContent])
+
+  const getActiveTabIndex = () => {
+    switch (activeBottomPanel) {
+      case 'Output':
+        return 0
+      case 'Visual':
+        return 1
+      case 'Terminal':
+        return 2
+      case 'Python REPL':
+        return 3
+      default:
+        return 0
+    }
+  }
+
+  return (
+    <Flex direction='column' h='100%'>
+      {/* Breadcrumb Navigation */}
+      <Box
+        bg={panelBgColor}
+        borderBottom='1px'
+        borderColor='gray.300'
+        px={4}
+        py={2}
+        transition='background-color 0.3s'
+      >
+        {/* BreadcrumbNavigation Component */}
+      </Box>
+
+      {/* Tabs */}
+      <Box
+        bg={panelBgColor}
+        borderBottom='1px'
+        borderColor='gray.300'
+        px={4}
+        py={1}
+        transition='background-color 0.3s'
+      >
+        <Flex alignItems='center' overflowX='auto'>
+          <Tabs
+            variant='soft-rounded'
+            colorScheme='teal'
+            isLazy
+            index={openFiles.indexOf(activeFile)}
+            onChange={index => setActiveFile(openFiles[index])}
+          >
+            <TabList>
+              {openFiles.map(file => (
+                <Tab
+                  key={file}
+                  filename={file}
+                  isActive={activeFile === file}
+                  onClick={() => setActiveFile(file)}
+                  onClose={() => handleCloseFile(file)}
+                  onRename={handleRenameFile}
+                  hasUnsavedChanges={unsavedFiles.has(file)}
+                />
+              ))}
+            </TabList>
+          </Tabs>
+          {/* Move "Add New File" button outside of TabList */}
+          <Tooltip label='Add New File' aria-label='Add New File Tooltip'>
+            <IconButton
+              icon={<AddIcon />}
+              size='xs'
+              variant='ghost'
+              aria-label='Add New File'
+              onClick={e => {
+                e.stopPropagation()
+                handleAddNewFile()
+              }}
+              _hover={{ bg: 'teal.500', color: 'white' }}
+              ml={2}
+            />
+          </Tooltip>
+        </Flex>
+      </Box>
+
+      <PanelGroup direction='vertical' style={{ flex: 1, display: 'flex' }}>
+        <Panel
+          minSize={1}
+          className='panel-editor'
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}
+        >
+          <Box position='relative' h='100%'>
+            <Suspense fallback={<Spinner />}>
+              <Editor
+                ref={editorRef}
+                activeFile={activeFile}
+                markFileAsUnsaved={markFileAsUnsaved}
+              />
+            </Suspense>
+          </Box>
+        </Panel>
+
+        {/* Conditionally Render PanelResizeHandle and Bottom Panel */}
+        {
+          <>
+            <PanelResizeHandle
+              className='resize-handle-horizontal'
+              style={{
+                display: isBottomPanelVisible ? 'flex' : 'none',
+                cursor: 'row-resize',
+                backgroundColor: panelBgColor,
+                height: '5px'
+              }}
+            />
+
+            <Panel
+              defaultSize={30}
+              minSize={5}
+              className='panel-bottom'
+              style={{
+                display: isBottomPanelVisible ? 'flex' : 'none',
+                flexDirection: 'column',
+                backgroundColor: panelBgColor,
+                overflow: 'hidden'
+              }}
+            >
+              {/* Bottom Panels Content */}
+              <Box h='100%' overflow='hidden'>
+                <Tabs
+                  variant='enclosed'
+                  size='sm'
+                  index={getActiveTabIndex()}
+                  onChange={index => {
+                    const panels = [
+                      'Output',
+                      'Visual',
+                      'Terminal',
+                      'Python REPL'
+                    ]
+                    setActiveBottomPanel(panels[index])
+                  }}
+                >
+                  <Flex alignItems='center'>
+                    <TabList>
+                      <ChakraTab>
+                        <Flex align='center'>
+                          <FaCode size={16} style={{ marginRight: '8px' }} />
+                          Output
+                        </Flex>
+                      </ChakraTab>
+                      <ChakraTab>
+                        <Flex align='center'>
+                          <FaImage size={16} style={{ marginRight: '8px' }} />
+                          Visual
+                        </Flex>
+                      </ChakraTab>
+                      <ChakraTab>
+                        <Flex align='center'>
+                          <FaTerminal
+                            size={16}
+                            style={{ marginRight: '8px' }}
+                          />
+                          Terminal
+                        </Flex>
+                      </ChakraTab>
+                      <ChakraTab>
+                        <Flex align='center'>
+                          <FaPython size={16} style={{ marginRight: '8px' }} />
+                          Python REPL
+                        </Flex>
+                      </ChakraTab>
+                    </TabList>
+                    <IconButton
+                      aria-label='Close Panel'
+                      icon={<CloseIcon />}
+                      size='sm'
+                      onClick={() => setIsBottomPanelVisible(false)}
+                      ml='auto'
+                      variant='ghost'
+                      _hover={{ bg: 'red.500', color: 'white' }}
+                      mt={1}
+                      mr={2}
+                    />
+                  </Flex>
+                  <TabPanels>
+                    <TabPanel p='2'>
+                      {output ? (
+                        <Output output={output} clearOutput={clearOutput} />
+                      ) : (
+                        <Center h='100%'>
+                          <Flex
+                            direction='column'
+                            align='center'
+                            color='gray.500'
+                          >
+                            <FaCode
+                              size={50}
+                              style={{ marginBottom: '16px' }}
+                            />
+                            <Text fontSize='md' mb={2}>
+                              Run your code
+                            </Text>
+                            <Text fontSize='sm'>
+                              Results of your code will appear here when you run
+                              the project.
+                            </Text>
+                          </Flex>
+                        </Center>
+                      )}
+                    </TabPanel>
+                    <TabPanel p='2' overflow='scroll' maxH='65vh'>
+                      <Box
+                        w='100%'
+                        h='100%'
+                        borderRadius='md'
+                        overflow='auto'
+                        boxShadow='sm'
+                        display='flex'
+                        flexDirection='column'
+                        alignItems='center'
+                        justifyContent='center'
+                        textAlign='center'
+                        fontSize='sm'
+                      >
+                        {plotContent &&
+                          plotContent.indexOf('matplotlib_') === -1 && (
+                            <>
+                              <Icon
+                                as={FaChartBar}
+                                boxSize={10}
+                                mb={2}
+                                color='gray.500'
+                              />
+                              <Text color='gray.500'>
+                                Render a graph and it will show here
+                              </Text>
+                            </>
+                          )}
+                        <Box
+                          id='plot-container'
+                          w='95%'
+                          h='100%'
+                          borderRadius='md'
+                          overflow='auto'
+                          boxShadow='sm'
+                          display='flex'
+                          flexDirection='column'
+                          alignItems='center'
+                          justifyContent='center'
+                          textAlign='center'
+                          fontSize='sm'
+                        >
+                          {plotContent &&
+                          plotContent.includes('matplotlib_') ? null : (
+                            <Text
+                              color={useColorModeValue('gray.500', 'gray.300')}
+                              textAlign='center'
+                              my={4}
+                            >
+                              <Icon as={FaChartBar} boxSize={10} mb={2} />
+                              <br />
+                              When a graph is rendered into the container, it
+                              will show here
+                            
+                            </Text>
+                          )}
+                        </Box>
+                      </Box>
+                    </TabPanel>
+
+                    <TabPanel p='2'>
+                      <Suspense fallback={<Spinner />}>
+                        <Terminal />
+                      </Suspense>
+                    </TabPanel>
+                    <TabPanel p='2'>
+                      <Suspense fallback={<Spinner />}>
+                        <PythonRepl />
+                      </Suspense>
+                    </TabPanel>
+                  </TabPanels>
+                </Tabs>
+              </Box>
+            </Panel>
+          </>
+        }
+      </PanelGroup>
+    </Flex>
+  )
+}
+
+export default EditorAndBottomPanels
+
+<== ./components/TopNavigationBar.tsx ==>
+import React from 'react'
+import {
+  Flex,
+  Box,
+  IconButton,
+  Text,
+  Tooltip,
+  useColorModeValue
+} from '@chakra-ui/react'
+import {
+  HamburgerIcon,
+  SunIcon,
+  MoonIcon,
+  SearchIcon,
+  SettingsIcon
+} from '@chakra-ui/icons'
+import { FaPlay, FaSave } from 'react-icons/fa'
+
+interface TopNavigationBarProps {
+  isMobile: boolean
+  colorMode: string
+  toggleColorMode: () => void
+  onOpen: () => void
+  handleRunCode: () => void
+  handleManualSave: () => void
+  isRunning: boolean
+  unsavedFiles: Set<string>
+  activeFile: string
+}
+
+const TopNavigationBar: React.FC<TopNavigationBarProps> = ({
+  isMobile,
+  colorMode,
+  toggleColorMode,
+  onOpen,
+  handleRunCode,
+  handleManualSave,
+  isRunning,
+  unsavedFiles,
+  activeFile
+}) => {
+  const bgColor = useColorModeValue('gray.100', 'gray.800')
+  const borderColor = useColorModeValue('gray.300', 'gray.500')
+  const textColor = useColorModeValue('gray.800', 'white')
+  const iconHoverBg = useColorModeValue('gray.100', 'gray.700')
+  const titleColor = useColorModeValue('teal.500', 'teal.300')
+  const titleHoverColor = useColorModeValue('teal.500', 'teal.400')
+
+  return (
+    <Flex
+      bg={bgColor}
+      p={4}
+      alignItems='center'
+      borderBottom='1px'
+      borderColor={borderColor}
+      shadow='md'
+      position='relative'
+      zIndex={1}
+    >
+      <IconButton
+        aria-label='Toggle Theme'
+        icon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
+        variant='ghost'
+        color={textColor}
+        onClick={toggleColorMode}
+        mr={2}
+        _hover={{ bg: iconHoverBg }}
+      />
+
+      {isMobile && (
+        <Box>
+          <Tooltip label='Open Menu' aria-label='Menu Tooltip'>
+            <IconButton
+              aria-label='Menu'
+              icon={<HamburgerIcon />}
+              variant='ghost'
+              color={textColor}
+              onClick={onOpen}
+              _hover={{ bg: iconHoverBg }}
+            />
+          </Tooltip>
+        </Box>
+      )}
+
+      <Text
+        fontSize='xl'
+        fontWeight='bold'
+        color={titleColor}
+        ml={{ base: 2, md: 0 }}
+        cursor='pointer'
+        _hover={{ color: titleHoverColor }}
+      >
+        PyBox
+      </Text>
+
+      {/* Search Bar */}
+      {!isMobile && (
+        <Flex ml={{ base: 0, md: 4 }} flex='1' alignItems='center' px={4}>
+          <Box flex='1'></Box>
+          <Tooltip label='Search Files' aria-label='Search Files Tooltip'>
+            <IconButton
+              icon={<SearchIcon />}
+              aria-label='Search'
+              size='sm'
+              colorScheme='teal'
+              variant='ghost'
+              _hover={{ bg: iconHoverBg }}
+              onClick={() => {
+                // TODO: search functionality
+              }}
+            />
+          </Tooltip>
+        </Flex>
+      )}
+
+      <Flex alignItems='center' ml='auto'>
+        {!isMobile && (
+          <>
+            <Tooltip label='Run Code (Ctrl+R)' aria-label='Run Code Tooltip'>
+              <IconButton
+                icon={<FaPlay />}
+                aria-label='Run Code'
+                size='lg'
+                colorScheme='green'
+                variant='solid'
+                onClick={handleRunCode}
+                isLoading={isRunning}
+                mr={4}
+                _hover={{ bg: 'green.600' }}
+              />
+            </Tooltip>
+
+            <Tooltip label='Save File (Ctrl+S)' aria-label='Save File Tooltip'>
+              <IconButton
+                icon={<FaSave />}
+                aria-label='Save File'
+                size='lg'
+                colorScheme='blue'
+                variant='solid'
+                onClick={handleManualSave}
+                isDisabled={!unsavedFiles.has(activeFile)}
+                mr={2}
+                _hover={{ bg: 'blue.600' }}
+              />
+            </Tooltip>
+
+            <Tooltip
+              label='Package Manager (Ctrl+Shift+P)'
+              aria-label='Package Manager Tooltip'
+            >
+              <IconButton
+                icon={<SettingsIcon />}
+                aria-label='Open Package Manager'
+                size='md'
+                colorScheme='purple'
+                variant='ghost'
+                onClick={onOpen}
+                mr={2}
+                _hover={{ bg: iconHoverBg }}
+              />
+            </Tooltip>
+          </>
+        )}
+      </Flex>
+    </Flex>
+  )
+}
+
+export default TopNavigationBar
+
+<== ./components/Spinner.tsx ==>
+import React from 'react'
+import { Spinner as ChakraSpinner, Flex } from '@chakra-ui/react'
+
+const SpinnerComponent: React.FC = React.memo(() => {
+  return (
+    <Flex align='center' justify='center'>
+      <ChakraSpinner size='xl' color='teal.500' />
+    </Flex>
+  )
+})
+
+export default SpinnerComponent
+
+<== ./components/ErrorBoundary.tsx ==>
+import React from 'react'
+import { Box, Text, Button } from '@chakra-ui/react'
+
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  ErrorBoundaryState
+> {
+  constructor (props: any) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError (error: any): ErrorBoundaryState {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch (error: any, errorInfo: any) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo)
+  }
+
+  handleReload = () => {
+    window.location.reload()
+  }
+
+  render () {
+    if (this.state.hasError && this.state.error) {
+      return (
+        <Box textAlign='center' mt='20'>
+          <Text fontSize='2xl' color='red.500'>
+            Something went wrong.
+          </Text>
+          <Text mt='4'>{this.state.error.message}</Text>
+          <Button mt='6' colorScheme='teal' onClick={this.handleReload}>
+            Reload Page
+          </Button>
+        </Box>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
+export default ErrorBoundary
+
+<== ./components/PythonRepl.tsx ==>
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  Box,
+  useColorModeValue,
+  useColorMode,
+  Button,
+  Flex
+} from '@chakra-ui/react'
+import { Terminal as XTerm } from 'xterm'
+import { FitAddon } from 'xterm-addon-fit'
+import 'xterm/css/xterm.css'
+import usePyodide from '../hooks/usePyodide'
+
+const PythonRepl: React.FC = () => {
+  const terminalRef = useRef<HTMLDivElement>(null)
+  const { pyodide, isLoading, error } = usePyodide()
+  const { colorMode } = useColorMode()
+  const [replKey, setReplKey] = useState<number>(0)
+  const [termI, setTermI] = useState<any>(null)
+
+  const terminalTheme = {
+    background: colorMode === 'dark' ? '#2D3748' : 'white',
+    foreground: colorMode === 'dark' ? '#E2E8F0' : '#2D3748',
+    cursor:
+      colorMode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)',
+    selectionBackground:
+      colorMode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'
+  }
+
+  useEffect(() => {
+    if (termI) {
+      termI.options.theme = terminalTheme
+    }
+  }, [colorMode])
+
+  useEffect(() => {
+    if (!pyodide || isLoading || error) return
+
+    let term: XTerm
+    let pyconsole: any
+    let await_fut: any
+    let commandHistory: string[] = []
+    let historyIndex: number = -1
+    let inputBuffer: string = ''
+    let codeBuffer: string = ''
+    let prompt = '>>> '
+    let currentFuture: any = null
+    let fitAddon: FitAddon
+    let cursorPosition: number = 0
+
+    const initializeRepl = async () => {
+      term = new XTerm({
+        cursorBlink: true,
+        convertEol: true,
+        fontFamily: '"Fira Code", monospace',
+        fontSize: 14,
+        theme: terminalTheme
+      })
+      setTermI(term)
+      fitAddon = new FitAddon()
+      term.loadAddon(fitAddon)
+      term.open(terminalRef.current!)
+      term.element!.style.padding = '16px'
+      fitAddon.fit()
+
+      window.addEventListener('resize', fitAddon.fit)
+      term.focus()
+
+      const pyConsoleModule = pyodide.pyimport('pyodide.console')
+      const { BANNER, PyodideConsole } = pyConsoleModule
+      pyconsole = PyodideConsole(pyodide.globals)
+
+      await_fut = pyodide.runPython(`
+import builtins
+from pyodide.ffi import to_js
+
+async def await_fut(fut):
+    try:
+        res = await fut
+        if res is not None:
+            builtins._ = res
+        return to_js([res], depth=1)
+    except KeyboardInterrupt:
+        return to_js([None], depth=1)
+
+await_fut
+`)
+
+      pyconsole.stdout_callback = (s: string) =>
+        term.write(s.replace(/\n/g, '\r\n'))
+      pyconsole.stderr_callback = (s: string) =>
+        term.write(s.replace(/\n/g, '\r\n'))
+
+      term.writeln(
+        `Welcome to the Pyodide ${pyodide.version} terminal emulator 🐍`
+      )
+      term.writeln(BANNER)
+
+      prompt = '>>> '
+      commandHistory = []
+      historyIndex = -1
+      inputBuffer = ''
+      codeBuffer = ''
+      cursorPosition = 0
+      currentFuture = null
+
+      term.write(prompt)
+
+      term.onKey(handleKey)
+    }
+
+    const refreshLine = () => {
+      term.write('\r')
+
+      term.write(prompt + inputBuffer)
+
+      term.write('\x1b[K')
+
+      const cursorPos = prompt.length + cursorPosition
+      const totalLength = prompt.length + inputBuffer.length
+      const moveLeft = totalLength - cursorPos
+      if (moveLeft > 0) {
+        term.write(`\x1b[${moveLeft}D`)
+      }
+    }
+
+    const handleKey = (event: { key: string; domEvent: KeyboardEvent }) => {
+      const { key, domEvent } = event
+      const printable =
+        !domEvent.altKey &&
+        !domEvent.ctrlKey &&
+        !domEvent.metaKey &&
+        domEvent.key.length === 1
+
+      if (domEvent.key === 'Enter') {
+        handleEnter()
+      } else if (domEvent.key === 'Backspace') {
+        handleBackspace()
+      } else if (domEvent.key === 'ArrowUp') {
+        handleHistoryNavigation('up')
+      } else if (domEvent.key === 'ArrowDown') {
+        handleHistoryNavigation('down')
+      } else if (domEvent.key === 'ArrowLeft') {
+        if (cursorPosition > 0) {
+          cursorPosition--
+          term.write('\x1b[D')
+        }
+      } else if (domEvent.key === 'ArrowRight') {
+        if (cursorPosition < inputBuffer.length) {
+          cursorPosition++
+          term.write('\x1b[C')
+        }
+      } else if (domEvent.key === 'Home') {
+        term.write(`\x1b[${cursorPosition}D`)
+        cursorPosition = 0
+      } else if (domEvent.key === 'End') {
+        term.write(`\x1b[${inputBuffer.length - cursorPosition}C`)
+        cursorPosition = inputBuffer.length
+      } else if (domEvent.key === 'Tab') {
+        handleTab()
+      } else if (domEvent.ctrlKey && domEvent.key === 'c') {
+        handleCtrlC()
+      } else if (printable) {
+        inputBuffer =
+          inputBuffer.slice(0, cursorPosition) +
+          key +
+          inputBuffer.slice(cursorPosition)
+        cursorPosition++
+        refreshLine()
+      }
+
+      domEvent.preventDefault()
+    }
+
+    const handleEnter = async () => {
+      term.write('\r\n')
+      const code = codeBuffer + inputBuffer
+
+      if (code.trim() !== '') {
+        commandHistory.push(codeBuffer + inputBuffer)
+      }
+      historyIndex = commandHistory.length
+
+      const currentInput = inputBuffer
+
+      inputBuffer = ''
+      cursorPosition = 0
+
+      term.options.disableStdin = true
+
+      try {
+        currentFuture = pyconsole.push(currentInput + '\n')
+
+        if (currentFuture.syntax_check === 'syntax-error') {
+          term.writeln(currentFuture.formatted_error.trimEnd())
+          codeBuffer = ''
+          prompt = '>>> '
+          term.write(prompt)
+          term.options.disableStdin = false
+        } else if (currentFuture.syntax_check === 'incomplete') {
+          codeBuffer += currentInput + '\n'
+          prompt = '... '
+          term.write(prompt)
+          term.options.disableStdin = false
+        } else if (currentFuture.syntax_check === 'complete') {
+          codeBuffer += currentInput + '\n'
+          try {
+            const wrapped = await_fut(currentFuture)
+            const [value] = await wrapped
+            if (value !== undefined) {
+              const resultStr = pyodide.runPython('repr(_)')
+              term.writeln(resultStr)
+            }
+          } catch (e: any) {
+            if (e.constructor.name === 'PythonError') {
+              const message = currentFuture.formatted_error || e.message
+              term.writeln(message.trimEnd())
+            } else {
+              console.error(e)
+              term.writeln(`Error: ${e.message}`)
+            }
+          } finally {
+            currentFuture.destroy()
+            currentFuture = null
+          }
+          codeBuffer = ''
+          prompt = '>>> '
+          term.write(prompt)
+          term.options.disableStdin = false
+        }
+      } catch (e: any) {
+        console.error(e)
+        term.writeln(`Error: ${e.message}`)
+        codeBuffer = ''
+        prompt = '>>> '
+        term.write(prompt)
+        term.options.disableStdin = false
+      }
+    }
+
+    const handleCtrlC = () => {
+      if (inputBuffer.length > 0 || codeBuffer.length > 0) {
+        inputBuffer = ''
+        codeBuffer = ''
+        cursorPosition = 0
+        term.write('^C\r\n')
+        prompt = '>>> '
+        term.write(prompt)
+        term.options.disableStdin = false
+      } else if (currentFuture && !currentFuture.f_done) {
+        try {
+          currentFuture.cancel()
+
+          pyodide.runPython(`
+import sys
+import _asyncio
+_asyncio.set_fatal_error_handler(lambda *args: None)
+raise KeyboardInterrupt
+`)
+          term.write('^C\r\nExecution interrupted\r\n')
+        } catch (e: any) {
+          console.error('Error during Ctrl+C handling:', e)
+        } finally {
+          currentFuture.destroy()
+          currentFuture = null
+          prompt = '>>> '
+          term.write(prompt)
+          term.options.disableStdin = false
+        }
+      } else {
+        term.write('^C\r\n')
+        prompt = '>>> '
+        term.write(prompt)
+        term.options.disableStdin = false
+      }
+    }
+
+    const handleBackspace = () => {
+      if (cursorPosition > 0) {
+        inputBuffer =
+          inputBuffer.slice(0, cursorPosition - 1) +
+          inputBuffer.slice(cursorPosition)
+        cursorPosition--
+        refreshLine()
+      }
+    }
+
+    const handleHistoryNavigation = (direction: 'up' | 'down') => {
+      if (direction === 'up' && historyIndex > 0) {
+        historyIndex--
+        const historyEntry = commandHistory[historyIndex]
+
+        codeBuffer = ''
+        prompt = '>>> '
+        inputBuffer = historyEntry
+        cursorPosition = inputBuffer.length
+        refreshLine()
+      } else if (direction === 'down') {
+        if (historyIndex < commandHistory.length - 1) {
+          historyIndex++
+          const historyEntry = commandHistory[historyIndex]
+
+          codeBuffer = ''
+          prompt = '>>> '
+          inputBuffer = historyEntry
+        } else {
+          historyIndex = commandHistory.length
+          codeBuffer = ''
+          prompt = '>>> '
+          inputBuffer = ''
+        }
+        cursorPosition = inputBuffer.length
+        refreshLine()
+      }
+    }
+
+    const handleTab = () => {
+      const inputUpToCursor = inputBuffer.slice(0, cursorPosition)
+      const match = inputUpToCursor.match(/([a-zA-Z0-9_\.]+)$/)
+      const currentWord = match ? match[1] : ''
+
+      if (currentWord === '') {
+        const indent = '    '
+        inputBuffer =
+          inputBuffer.slice(0, cursorPosition) +
+          indent +
+          inputBuffer.slice(cursorPosition)
+        cursorPosition += indent.length
+        refreshLine()
+      } else {
+        handleTabCompletion()
+      }
+    }
+
+    const handleTabCompletion = () => {
+      const inputUpToCursor = inputBuffer.slice(0, cursorPosition)
+      const completionResult = pyconsole.complete(inputUpToCursor).toJs()
+      const completions = completionResult[0]
+      const offset = completionResult[1]
+
+      if (completions.length === 0) {
+      } else if (completions.length === 1) {
+        const completion = completions[0]
+        const toInsert = completion.slice(offset)
+        inputBuffer =
+          inputBuffer.slice(0, cursorPosition) +
+          toInsert +
+          inputBuffer.slice(cursorPosition)
+        cursorPosition += toInsert.length
+        refreshLine()
+      } else if (completions.length > 1) {
+        term.write('\r\n')
+        term.writeln(completions.join('  '))
+        term.write(prompt + inputBuffer)
+
+        const cursorPos = prompt.length + cursorPosition
+        const totalLength = prompt.length + inputBuffer.length
+        if (cursorPos < totalLength) {
+          term.write(`\x1b[${totalLength - cursorPos}D`)
+        }
+      }
+    }
+
+    initializeRepl()
+
+    return () => {
+      term?.dispose()
+      window.removeEventListener('resize', fitAddon.fit)
+    }
+  }, [pyodide, isLoading, error, replKey])
+
+  const resetRepl = () => {
+    setReplKey(prev => prev + 1)
+  }
+
+  return (
+    <Box position='relative'>
+      <Box
+        key={replKey}
+        ref={terminalRef}
+        style={{
+          width: '100%',
+          maxHeight: '350px'
+        }}
+        bg={useColorModeValue('gray.900', 'gray.800')}
+        borderRadius='lg'
+        overflow='hidden'
+      />
+
+      <Flex justifyContent='center' mb={2}>
+        <Button mt='2' size='sm' onClick={resetRepl}>
+          Clear
+        </Button>
+      </Flex>
+    </Box>
+  )
+}
+
+export default PythonRepl
+
+<== ./theme/colors.ts ==>
+import { useColorModeValue } from '@chakra-ui/react'
+
+export const useThemeColors = () => {
+  const bgColor = useColorModeValue('gray.50', 'gray.900')
+  const viewBgColor = useColorModeValue('gray.800', 'gray.700')
+  const panelBgColor = useColorModeValue('gray.100', 'gray.800')
+
+  return { bgColor, viewBgColor, panelBgColor }
+}
+
+<== ./hooks/useHandlers.ts ==>
+import { useToast } from '@chakra-ui/react'
+import { useFilesystem } from '../context/FilesystemContext'
+
+interface UseHandlersParams {
+  activeFile: string
+  setActiveFile: React.Dispatch<React.SetStateAction<string>>
+  openFiles: string[]
+  setOpenFiles: React.Dispatch<React.SetStateAction<string[]>>
+  markFileAsSaved: (filename: string) => void
+  markFileAsUnsaved: (filename: string) => void
+  refreshFS: () => Promise<void>
+  installPackage: (packageName: string) => Promise<void>
+  runCode: (filename: string) => Promise<string>
+  setOutput: React.Dispatch<React.SetStateAction<string>>
+  setIsRunning: React.Dispatch<React.SetStateAction<boolean>>
+  isBottomPanelVisible: boolean
+  setIsBottomPanelVisible: React.Dispatch<React.SetStateAction<boolean>>
+  setActiveBottomPanel: React.Dispatch<React.SetStateAction<string>>
+  unsavedFiles: Set<string>
+  editorRef: React.RefObject<any>
+}
+
+export const useHandlers = ({
+  activeFile,
+  setActiveFile,
+  openFiles,
+  setOpenFiles,
+  markFileAsSaved,
+  markFileAsUnsaved,
+  refreshFS,
+  installPackage,
+  runCode,
+  setOutput,
+  setIsRunning,
+  isBottomPanelVisible,
+  setIsBottomPanelVisible,
+  setActiveBottomPanel,
+  unsavedFiles,
+  editorRef
+}: UseHandlersParams) => {
+  const toast = useToast()
+  const { sharedDir } = useFilesystem()
+
+  const handleManualSave = async () => {
+    if (editorRef.current && editorRef.current.saveFile) {
+      await editorRef.current.saveFile()
+      markFileAsSaved(activeFile)
+    } else {
+      console.error('Editor ref is not available.')
+    }
+  }
+
+  const handleSaveFile = async () => {
+    await handleManualSave()
+  }
+
+  const handleRunCode = async () => {
+    if (!activeFile) {
+      toast({
+        title: 'No Active File',
+        description: 'Please select a file to run.',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true
+      })
+      return
+    }
+
+    if (unsavedFiles.has(activeFile)) {
+      await handleManualSave()
+    }
+
+    setIsRunning(true)
+    try {
+      const output = await runCode(activeFile)
+      setOutput(output)
+      if (!isBottomPanelVisible) {
+        setIsBottomPanelVisible(true)
+      }
+      setActiveBottomPanel('Output')
+    } catch (err: any) {
+      console.error('Error running code:', err)
+      toast({
+        title: 'Execution Error',
+        description: err.message || 'An error occurred while running the code.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true
+      })
+    } finally {
+      setIsRunning(false)
+    }
+  }
+
+  const handleFileSelect = (filename: string) => {
+    setActiveFile(filename)
+
+    setOpenFiles(prevOpenFiles => {
+      if (!prevOpenFiles.includes(filename)) {
+        return [...prevOpenFiles, filename]
+      }
+      return prevOpenFiles
+    })
+  }
+
+  const handleInstallPackage = async (packageName: string) => {
+    if (!packageName.trim()) {
+      toast({
+        title: 'Invalid Package Name',
+        description: 'Package name cannot be empty.',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true
+      })
+      return
+    }
+
+    setIsRunning(true)
+    try {
+      await installPackage(packageName.trim())
+      setOutput(`Package '${packageName.trim()}' installed successfully.`)
+      toast({
+        title: 'Package Installed',
+        description: `Package '${packageName.trim()}' installed successfully.`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true
+      })
+      await refreshFS()
+    } catch (error: any) {
+      setOutput(
+        `Error installing package '${packageName.trim()}': ${error.message}`
+      )
+      toast({
+        title: 'Package Installation Error',
+        description:
+          error.message || 'An error occurred while installing the package.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true
+      })
+    } finally {
+      setIsRunning(false)
+    }
+  }
+
+  const handleAddNewFile = async () => {
+    const newFile = `new_file${Date.now()}.py`
+    try {
+      await sharedDir.writeFile(
+        `runner/${newFile}`,
+        new TextEncoder().encode('')
+      )
+      setOpenFiles(prev => [...prev, newFile])
+      setActiveFile(newFile)
+      toast({
+        title: 'New File Created',
+        description: `File '${newFile}' has been created.`,
+        status: 'info',
+        duration: 3000,
+        isClosable: true
+      })
+      await refreshFS()
+      if (!isBottomPanelVisible) {
+        setIsBottomPanelVisible(true)
+      }
+      setActiveBottomPanel('Output')
+    } catch (err: any) {
+      console.error('Error creating new file:', err)
+      toast({
+        title: 'Error Creating File',
+        description:
+          err.message || 'An error occurred while creating the file.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true
+      })
+    }
+  }
+
+  const handleCloseFile = (file: string) => {
+    setOpenFiles(prev => {
+      const newOpenFiles = prev.filter(f => f !== file)
+      if (activeFile === file && newOpenFiles.length > 0) {
+        setActiveFile(newOpenFiles[0])
+      } else if (newOpenFiles.length === 0) {
+        setActiveFile('')
+      }
+      return newOpenFiles
+    })
+    toast({
+      title: 'File Closed',
+      description: `File '${file}' has been closed.`,
+      status: 'warning',
+      duration: 3000,
+      isClosable: true
+    })
+  }
+
+  const toggleBottomPanel = () => {
+    setIsBottomPanelVisible(prev => !prev)
+    toast({
+      title: isBottomPanelVisible
+        ? 'Output Panel Hidden'
+        : 'Output Panel Shown',
+      status: 'info',
+      duration: 2000,
+      isClosable: true
+    })
+  }
+
+  const clearOutput = () => {
+    setOutput('')
+    toast({
+      title: 'Output Cleared',
+      status: 'success',
+      duration: 2000,
+      isClosable: true
+    })
+  }
+
+  const handleRenameFile = async (oldName: string, newName: string) => {
+    try {
+      const oldPath = `/home/runner/${oldName}`
+      const newPath = `/home/runner/${newName}`
+      const content = await sharedDir.readFile(oldPath)
+
+      await sharedDir.writeFile(newPath, content)
+
+      await sharedDir.removeFile(oldPath)
+
+      setOpenFiles(prev => prev.map(f => (f === oldName ? newName : f)))
+      if (activeFile === oldName) {
+        setActiveFile(newName)
+      }
+
+      toast({
+        title: 'File Renamed',
+        description: `File '${oldName}' has been renamed to '${newName}'.`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true
+      })
+
+      await refreshFS()
+    } catch (err: any) {
+      console.error('Error renaming file:', err)
+      toast({
+        title: 'Rename Error',
+        description:
+          err.message || 'An error occurred while renaming the file.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true
+      })
+    }
+  }
+
+  return {
+    handleRunCode,
+    handleFileSelect,
+    handleInstallPackage,
+    handleAddNewFile,
+    handleCloseFile,
+    toggleBottomPanel,
+    handleManualSave,
+    handleSaveFile,
+    clearOutput,
+    handleRenameFile
+  }
+}
+
+<== ./hooks/useEditorState.ts ==>
+import { useState } from 'react'
+
+export const useEditorState = () => {
+  const [openFiles, setOpenFiles] = useState<string[]>(['main.py'])
+  const [activeFile, setActiveFile] = useState<string>('main.py')
+  const [unsavedFiles, setUnsavedFiles] = useState<Set<string>>(new Set())
+
+  const markFileAsUnsaved = (filename: string) => {
+    setUnsavedFiles(prev => new Set(prev).add(filename))
+  }
+
+  const markFileAsSaved = (filename: string) => {
+    setUnsavedFiles(prev => {
+      const updated = new Set(prev)
+      updated.delete(filename)
+      return updated
+    })
+  }
+
+  return {
+    openFiles,
+    setOpenFiles,
+    activeFile,
+    setActiveFile,
+    unsavedFiles,
+    markFileAsUnsaved,
+    markFileAsSaved
+  }
+}
+
+<== ./hooks/usePyodide.tsx ==>
+import { useState, useEffect, useCallback } from 'react'
+import { useFilesystem } from '../context/FilesystemContext'
+
+declare global {
+  interface Window {
+    loadPyodide: any
+  }
+}
+
+const usePyodide = () => {
+  const { sharedDir } = useFilesystem()
+  const [pyodide, setPyodide] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<any>(null)
+  const [installedPackages, setInstalledPackages] = useState<string[]>([])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadPyodideInstance = async () => {
+      try {
+        if (!window.loadPyodide) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src =
+              'https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js' // Use the latest version
+            script.onload = () => resolve()
+            script.onerror = () =>
+              reject(new Error('Failed to load Pyodide script'))
+            document.head.appendChild(script)
+          })
+        }
+
+        const pyodideInstance = await window.loadPyodide({
+          stdout: (msg: string) => console.log(msg),
+          stderr: (msg: string) => console.error(msg)
+        })
+
+        if (isMounted) {
+          setPyodide(pyodideInstance)
+          setIsLoading(false)
+          console.log('Pyodide successfully loaded and initialized')
+        }
+
+        await synchronizeFSToPyodide(pyodideInstance)
+        console.log('Initial synchronization complete')
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err)
+          setIsLoading(false)
+          console.error('Error loading Pyodide:', err)
+        }
+      }
+    }
+
+    loadPyodideInstance()
+
+    return () => {
+      isMounted = false
+    }
+  }, [sharedDir])
+
+  const synchronizeFSToPyodide = useCallback(
+    async (pyodideInstance: {
+      FS: {
+        mkdir: (arg0: string) => void
+        readdir: (arg0: string) => any[]
+        stat: (arg0: string) => any
+        isDir: (arg0: any) => any
+        unlink: (arg0: string) => void
+        writeFile: (arg0: string, arg1: Uint8Array) => void
+      }
+    }) => {
+      console.log('Synchronizing from sharedDir:/runner to Pyodide FS:/runner')
+
+      try {
+        pyodideInstance.FS.mkdir('/runner')
+      } catch (e) {}
+
+      const sharedEntries = await sharedDir.readDir('/runner')
+      const sharedEntryNames = sharedEntries.map(entry => entry.name)
+
+      const pyodideEntries = pyodideInstance.FS.readdir('/runner').filter(
+        (name: string) => name !== '.' && name !== '..'
+      )
+
+      for (const entryName of pyodideEntries) {
+        if (!sharedEntryNames.includes(entryName)) {
+          const pyodideEntryPath = `/runner/${entryName}`
+          const stat = pyodideInstance.FS.stat(pyodideEntryPath)
+          if (pyodideInstance.FS.isDir(stat.mode)) {
+            removeDirRecursivelyPyodide(pyodideInstance, pyodideEntryPath)
+          } else {
+            pyodideInstance.FS.unlink(pyodideEntryPath)
+          }
+          console.log(`Deleted from Pyodide FS: ${pyodideEntryPath}`)
+        }
+      }
+
+      for (const entry of sharedEntries) {
+        const sharedEntryPath = `/runner/${entry.name}`
+        const pyodideEntryPath = `/runner/${entry.name}`
+        if (entry.type === 'file') {
+          const content = await sharedDir.readFile(sharedEntryPath)
+          pyodideInstance.FS.writeFile(pyodideEntryPath, content)
+          console.log(`Synchronized file to Pyodide FS: ${pyodideEntryPath}`)
+        } else if (entry.type === 'dir') {
+          await synchronizeDirectoryToPyodide(
+            pyodideInstance,
+            sharedEntryPath,
+            pyodideEntryPath
+          )
+        }
+      }
+    },
+    [sharedDir]
+  )
+
+  async function synchronizeDirectoryToPyodide (
+    pyodideInstance: any,
+    sharedDirPath: string,
+    pyodideDirPath: string
+  ) {
+    try {
+      pyodideInstance.FS.mkdir(pyodideDirPath)
+    } catch (e) {}
+
+    const sharedEntries = await sharedDir.readDir(sharedDirPath)
+    const sharedEntryNames = sharedEntries.map(entry => entry.name)
+
+    const pyodideEntries = pyodideInstance.FS.readdir(pyodideDirPath).filter(
+      (name: string) => name !== '.' && name !== '..'
+    )
+
+    for (const entryName of pyodideEntries) {
+      if (!sharedEntryNames.includes(entryName)) {
+        const pyodideEntryPath = `${pyodideDirPath}/${entryName}`
+        const stat = pyodideInstance.FS.stat(pyodideEntryPath)
+        if (pyodideInstance.FS.isDir(stat.mode)) {
+          removeDirRecursivelyPyodide(pyodideInstance, pyodideEntryPath)
+        } else {
+          pyodideInstance.FS.unlink(pyodideEntryPath)
+        }
+        console.log(`Deleted from Pyodide FS: ${pyodideEntryPath}`)
+      }
+    }
+
+    for (const entry of sharedEntries) {
+      const sharedEntryPath = `${sharedDirPath}/${entry.name}`
+      const pyodideEntryPath = `${pyodideDirPath}/${entry.name}`
+      if (entry.type === 'file') {
+        const content = await sharedDir.readFile(sharedEntryPath)
+        pyodideInstance.FS.writeFile(pyodideEntryPath, content)
+        console.log(`Synchronized file to Pyodide FS: ${pyodideEntryPath}`)
+      } else if (entry.type === 'dir') {
+        await synchronizeDirectoryToPyodide(
+          pyodideInstance,
+          sharedEntryPath,
+          pyodideEntryPath
+        )
+      }
+    }
+  }
+
+  async function removeDirRecursively (dirPath: string): Promise<void> {
+    const entries = await sharedDir.readDir(dirPath)
+    for (const entry of entries) {
+      const entryPath = `${dirPath}/${entry.name}`
+      if (entry.type === 'dir') {
+        await removeDirRecursively(entryPath)
+      } else {
+        await sharedDir.removeFile(entryPath)
+      }
+    }
+    await sharedDir.removeDir(dirPath)
+  }
+
+  const synchronizePyodideToFS = useCallback(
+    async (pyodideInstance: any) => {
+      console.log('Synchronizing from Pyodide FS:/runner to sharedDir:/runner')
+
+      try {
+        await sharedDir.createDir('/runner')
+      } catch (e) {}
+
+      const pyodideEntries = pyodideInstance.FS.readdir('/runner').filter(
+        (name: string) => name !== '.' && name !== '..'
+      )
+      const pyodideEntrySet = new Set(pyodideEntries)
+
+      const sharedEntries = await sharedDir.readDir('/runner')
+
+      for (const entry of sharedEntries) {
+        if (!pyodideEntrySet.has(entry.name)) {
+          const sharedEntryPath = `/runner/${entry.name}`
+          if (entry.type === 'dir') {
+            await removeDirRecursively(sharedEntryPath)
+          } else {
+            await sharedDir.removeFile(sharedEntryPath)
+          }
+          console.log(`Deleted from sharedDir: ${sharedEntryPath}`)
+        }
+      }
+
+      for (const entryName of pyodideEntries) {
+        const pyodideEntryPath = `/runner/${entryName}`
+        const sharedEntryPath = `/runner/${entryName}`
+        const stat = pyodideInstance.FS.stat(pyodideEntryPath)
+        if (pyodideInstance.FS.isFile(stat.mode)) {
+          const content = pyodideInstance.FS.readFile(pyodideEntryPath, {
+            encoding: 'binary'
+          })
+          await sharedDir.writeFile(sharedEntryPath, content)
+          console.log(
+            `Synchronized file from Pyodide FS to sharedDir: ${sharedEntryPath}`
+          )
+        } else if (pyodideInstance.FS.isDir(stat.mode)) {
+          await synchronizeDirectoryFromPyodide(
+            pyodideInstance,
+            pyodideEntryPath,
+            sharedEntryPath
+          )
+        }
+      }
+    },
+    [sharedDir]
+  )
+
+  async function synchronizeDirectoryFromPyodide (
+    pyodideInstance: any,
+    pyodideDirPath: string,
+    sharedDirPath: string
+  ) {
+    try {
+      await sharedDir.createDir(sharedDirPath)
+    } catch (e) {}
+
+    const pyodideEntries = pyodideInstance.FS.readdir(pyodideDirPath).filter(
+      (name: string) => name !== '.' && name !== '..'
+    )
+    const pyodideEntrySet = new Set(pyodideEntries)
+
+    const sharedEntries = await sharedDir.readDir(sharedDirPath)
+
+    for (const entry of sharedEntries) {
+      if (!pyodideEntrySet.has(entry.name)) {
+        const sharedEntryPath = `${sharedDirPath}/${entry.name}`
+        if (entry.type === 'dir') {
+          await removeDirRecursively(sharedEntryPath)
+        } else {
+          await sharedDir.removeFile(sharedEntryPath)
+        }
+        console.log(`Deleted from sharedDir: ${sharedEntryPath}`)
+      }
+    }
+
+    for (const entryName of pyodideEntries) {
+      const pyodideEntryPath = `${pyodideDirPath}/${entryName}`
+      const sharedEntryPath = `${sharedDirPath}/${entryName}`
+      const stat = pyodideInstance.FS.stat(pyodideEntryPath)
+      if (pyodideInstance.FS.isFile(stat.mode)) {
+        const content = pyodideInstance.FS.readFile(pyodideEntryPath, {
+          encoding: 'binary'
+        })
+        await sharedDir.writeFile(sharedEntryPath, content)
+        console.log(
+          `Synchronized file from Pyodide FS to sharedDir: ${sharedEntryPath}`
+        )
+      } else if (pyodideInstance.FS.isDir(stat.mode)) {
+        await synchronizeDirectoryFromPyodide(
+          pyodideInstance,
+          pyodideEntryPath,
+          sharedEntryPath
+        )
+      }
+    }
+  }
+
+  function removeDirRecursivelyPyodide (
+    pyodideInstance: any,
+    dirPath: string
+  ): void {
+    const entries = pyodideInstance.FS.readdir(dirPath).filter(
+      (name: string) => name !== '.' && name !== '..'
+    )
+    for (const entryName of entries) {
+      const entryPath = `${dirPath}/${entryName}`
+      const stat = pyodideInstance.FS.stat(entryPath)
+      if (pyodideInstance.FS.isDir(stat.mode)) {
+        removeDirRecursivelyPyodide(pyodideInstance, entryPath)
+      } else {
+        pyodideInstance.FS.unlink(entryPath)
+      }
+    }
+    pyodideInstance.FS.rmdir(dirPath)
+  }
+
+  const runCode = useCallback(
+    async (activeFile: string) => {
+      if (!pyodide) {
+        throw new Error('Pyodide is not loaded')
+      }
+
+      try {
+        await synchronizeFSToPyodide(pyodide)
+
+        await pyodide.runPythonAsync(`
+import sys
+from io import StringIO
+import traceback
+sys.stdout = StringIO()
+sys.stderr = StringIO()
+import os
+os.chdir('/runner')
+        `)
+
+        await pyodide.runPythonAsync(`
+try:
+    exec(open('${activeFile}').read())
+except Exception:
+    traceback.print_exc()
+        `)
+
+        const output = pyodide.runPython(`
+stdout = sys.stdout.getvalue()
+stderr = sys.stderr.getvalue()
+sys.stdout = sys.__stdout__
+sys.stderr = sys.__stderr__
+stdout + stderr
+        `)
+
+        await synchronizePyodideToFS(pyodide)
+
+        return output
+      } catch (error: any) {
+        console.error('Error during code execution:', error)
+        return `Error: ${error}`
+      }
+    },
+    [pyodide, synchronizeFSToPyodide, synchronizePyodideToFS]
+  )
+
+  const installPackage = useCallback(
+    async (packageName: string) => {
+      if (!pyodide) {
+        throw new Error('Pyodide is not loaded')
+      }
+
+      try {
+        if (pyodide.loadedPackages[packageName]) {
+          console.log(`Package '${packageName}' is already loaded.`)
+          return
+        }
+
+        if (!pyodide.loadedPackages['micropip']) {
+          await pyodide.loadPackage('micropip')
+          console.log('Loaded micropip')
+        }
+
+        const micropip = pyodide.pyimport('micropip')
+        await micropip.install(packageName)
+        setInstalledPackages(prev => [...new Set([...prev, packageName])])
+        console.log(`Installed package: ${packageName}`)
+      } catch (error) {
+        console.error(`Failed to install package '${packageName}':`, error)
+        throw new Error(`Failed to install package '${packageName}': ${error}`)
+      }
+    },
+    [pyodide]
+  )
+
+  return {
+    pyodide,
+    isLoading,
+    error,
+    runCode,
+    installPackage,
+    installedPackages
+  }
+}
+
+export default usePyodide
+
