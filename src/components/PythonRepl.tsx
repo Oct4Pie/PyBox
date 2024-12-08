@@ -62,9 +62,14 @@ const PythonRepl: React.FC = () => {
       term.open(terminalRef.current!)
       term.element!.style.padding = '16px'
       fitAddon.fit()
-
-      window.addEventListener('resize', fitAddon.fit)
       term.focus()
+
+      setTimeout(() => fitAddon.fit(), 0)
+
+      const resizeObserver = new ResizeObserver(() => {
+        fitAddon.fit()
+      })
+      resizeObserver.observe(terminalRef.current!)
 
       const pyConsoleModule = pyodide.pyimport('pyodide.console')
       const { BANNER, PyodideConsole } = pyConsoleModule
@@ -365,7 +370,6 @@ raise KeyboardInterrupt
 
     return () => {
       term?.dispose()
-      window.removeEventListener('resize', fitAddon.fit)
     }
   }, [pyodide, isLoading, error, replKey])
 
@@ -374,9 +378,8 @@ raise KeyboardInterrupt
   }
 
   return (
-    <Box position='relative'>
+    <Box key={replKey} position='relative'>
       <Box
-        key={replKey}
         ref={terminalRef}
         style={{
           width: '100%',
@@ -384,7 +387,7 @@ raise KeyboardInterrupt
         }}
         bg={useColorModeValue('gray.900', 'gray.800')}
         borderRadius='lg'
-        overflow='hidden'
+        overflow='scroll'
       />
 
       <Flex justifyContent='center' mb={2}>

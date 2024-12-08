@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense } from 'react'
+import React, { useState, useRef, Suspense, useEffect } from 'react'
 import {
   Flex,
   Center,
@@ -15,7 +15,6 @@ import { HotKeys } from 'react-hotkeys'
 import Spinner from './components/Spinner'
 import usePyodide from './hooks/usePyodide'
 import { useFilesystem } from './context/FilesystemContext'
-
 import { keyMap, createHandlers } from './config/keyboardShortcuts'
 import { useEditorState } from './hooks/useEditorState'
 import { useThemeColors } from './theme/colors'
@@ -29,8 +28,17 @@ const MainLayout = React.lazy(() => import('./components/MainLayout'))
 
 const App: React.FC = () => {
   const { colorMode, toggleColorMode } = useColorMode()
-  const isMobile = useBreakpointValue({ base: true, md: false }) || false
+  const rawIsMobile = useBreakpointValue({ base: true, md: false }) || false
+  const [isMobile, setIsMobile] = useState(rawIsMobile)
   const { bgColor, panelBgColor } = useThemeColors()
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setIsMobile(rawIsMobile)
+    }, 1000)
+
+    return () => clearInterval(intervalId)
+  }, [rawIsMobile])
 
   const {
     openFiles,
@@ -97,6 +105,14 @@ const App: React.FC = () => {
     return parseInt(localStorage.getItem('fileExplorerSize') || '20')
   })
 
+  const [mobileFileExplorerOpen, setMobileFileExplorerOpen] = useState(false)
+
+  const handleOpenFileExplorer = () => {
+    if (isMobile) {
+      setMobileFileExplorerOpen(true)
+    }
+  }
+
   if (isLoading) {
     return (
       <Center h='100vh' bg={bgColor}>
@@ -119,7 +135,6 @@ const App: React.FC = () => {
       <Flex h='100vh' direction='column' bg={bgColor} overflow='hidden'>
         {/* Top Navigation Bar */}
         <TopNavigationBar
-          isMobile={isMobile}
           colorMode={colorMode}
           toggleColorMode={toggleColorMode}
           onOpen={onOpen}
@@ -128,10 +143,18 @@ const App: React.FC = () => {
           isRunning={isRunning}
           unsavedFiles={unsavedFiles}
           activeFile={activeFile}
+          onOpenFileExplorer={handleOpenFileExplorer}
+          isMobile={isMobile}
         />
 
         {/* Main Layout */}
-        <Suspense fallback={<Center><Spinner /></Center>}>
+        <Suspense
+          fallback={
+            <Center>
+              <Spinner />
+            </Center>
+          }
+        >
           <MainLayout
             fileExplorerSize={fileExplorerSize}
             setFileExplorerSize={setFileExplorerSize}
@@ -153,6 +176,9 @@ const App: React.FC = () => {
             output={output}
             clearOutput={clearOutput}
             editorRef={editorRef}
+            isMobile={!!isMobile}
+            mobileFileExplorerOpen={mobileFileExplorerOpen}
+            setMobileFileExplorerOpen={setMobileFileExplorerOpen}
           />
         </Suspense>
 
@@ -180,12 +206,19 @@ const App: React.FC = () => {
         </Tooltip>
 
         {/* Package Manager Drawer */}
-        <Suspense fallback={<Center><Spinner /></Center>}>
+        <Suspense
+          fallback={
+            <Center>
+              <Spinner />
+            </Center>
+          }
+        >
           <PackageManagerDrawer
             isOpen={isOpen}
             onClose={onClose}
             onInstall={handleInstallPackage}
             installedPackages={installedPackages}
+            isMobile={!!isMobile}
           />
         </Suspense>
       </Flex>

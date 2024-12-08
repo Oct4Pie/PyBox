@@ -15,26 +15,31 @@ interface PackageManagerDrawerProps {
   onClose: () => void
   onInstall: (packageName: string) => void
   installedPackages: string[]
+  isMobile?: boolean
 }
 
 const PackageManagerDrawer: React.FC<PackageManagerDrawerProps> = ({
   isOpen,
   onClose,
   onInstall,
-  installedPackages
+  installedPackages,
+  isMobile = false
 }) => {
+  const drawerPlacement = isMobile ? 'bottom' : 'right'
+  const drawerSize = isMobile ? 'full' : 'md'
+
   return (
     <Drawer
       isOpen={isOpen}
-      placement='right'
+      placement={drawerPlacement}
       onClose={onClose}
-      size='md'
+      size={drawerSize}
       isFullHeight
     >
       <DrawerOverlay />
-      <DrawerContent>
-        <DrawerCloseButton />
-        <DrawerBody bgColor={useColorModeValue('gray.50', 'gray.800')}>
+      <DrawerContent bgColor={useColorModeValue('gray.50', 'gray.800')}>
+        <DrawerCloseButton size="lg" top={4} right={4} />
+        <DrawerBody p={0}>
           <Suspense fallback={<Spinner />}>
             <PackageManager
               onInstall={onInstall}

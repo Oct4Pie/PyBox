@@ -1,6 +1,13 @@
 import React, { Suspense } from 'react'
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'
-import { Box, Center } from '@chakra-ui/react'
+import {
+  Box,
+  Center,
+  Drawer,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerBody
+} from '@chakra-ui/react'
 import Spinner from './Spinner'
 import FileSystem from './FileSystem'
 
@@ -27,6 +34,9 @@ interface MainLayoutProps {
   output: string
   clearOutput: () => void
   editorRef: React.RefObject<any>
+  isMobile: boolean
+  mobileFileExplorerOpen: boolean // NEW prop from App
+  setMobileFileExplorerOpen: (open: boolean) => void // NEW prop from App
 }
 
 const MainLayout: React.FC<MainLayoutProps> = ({
@@ -49,8 +59,75 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   setActiveBottomPanel,
   output,
   clearOutput,
-  editorRef
+  editorRef,
+  isMobile,
+  mobileFileExplorerOpen,
+  setMobileFileExplorerOpen
 }) => {
+  if (isMobile) {
+    return (
+      <>
+        <Drawer
+          isOpen={mobileFileExplorerOpen}
+          onClose={() => setMobileFileExplorerOpen(false)}
+          size='xs'
+          placement='left'
+        >
+          <DrawerOverlay />
+          <DrawerContent bg={panelBgColor}>
+            <DrawerBody p={0}>
+              <Suspense
+                fallback={
+                  <Center>
+                    <Spinner />
+                  </Center>
+                }
+              >
+                <FileSystem
+                  onFileSelect={file => {
+                    handleFileSelect(file)
+                    setMobileFileExplorerOpen(false)
+                  }}
+                  activeFile={activeFile}
+                  unsavedFiles={unsavedFiles}
+                />
+              </Suspense>
+            </DrawerBody>
+          </DrawerContent>
+        </Drawer>
+
+        <Suspense
+          fallback={
+            <Center>
+              <Spinner />
+            </Center>
+          }
+        >
+          <EditorAndBottomPanels
+            panelBgColor={panelBgColor}
+            activeFile={activeFile}
+            openFiles={openFiles}
+            setActiveFile={setActiveFile}
+            handleCloseFile={handleCloseFile}
+            handleRenameFile={handleRenameFile}
+            handleAddNewFile={handleAddNewFile}
+            unsavedFiles={unsavedFiles}
+            markFileAsUnsaved={markFileAsUnsaved}
+            handleSaveFile={handleSaveFile}
+            isBottomPanelVisible={isBottomPanelVisible}
+            setIsBottomPanelVisible={setIsBottomPanelVisible}
+            activeBottomPanel={activeBottomPanel}
+            setActiveBottomPanel={setActiveBottomPanel}
+            output={output}
+            clearOutput={clearOutput}
+            editorRef={editorRef}
+          />
+        </Suspense>
+      </>
+    )
+  }
+
+  // Desktop Layout: Traditional split panels (file explorer always visible)
   return (
     <PanelGroup direction='horizontal' style={{ flex: 1, display: 'flex' }}>
       {/* File Explorer Panel */}
@@ -67,7 +144,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         }}
       >
         <Box h='100%' overflowY='auto' p={2} transition='background-color 0.3s'>
-          <Suspense fallback={<Center><Spinner /></Center>}>
+          <Suspense
+            fallback={
+              <Center>
+                <Spinner />
+              </Center>
+            }
+          >
             <FileSystem
               onFileSelect={handleFileSelect}
               activeFile={activeFile}
@@ -83,8 +166,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         style={{
           cursor: 'col-resize',
           backgroundColor: panelBgColor,
-          width: '5px',
-          transition: 'background-color 0.3s'
+          width: 5,
+          transition: 'background-color 0.3s',
+          
         }}
       />
 
@@ -97,7 +181,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           overflow: 'hidden'
         }}
       >
-        <Suspense fallback={<Center><Spinner /></Center>}>
+        <Suspense
+          fallback={
+            <Center>
+              <Spinner />
+            </Center>
+          }
+        >
           <EditorAndBottomPanels
             panelBgColor={panelBgColor}
             activeFile={activeFile}
