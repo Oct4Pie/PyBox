@@ -122,7 +122,6 @@ const EditorAndBottomPanels: React.FC<EditorAndBottomPanelsProps> = ({
 
   return (
     <Flex direction='column' h='100%'>
-      {/* Breadcrumb Navigation */}
       <Box
         bg={panelBgColor}
         borderBottom='1px'
@@ -130,9 +129,7 @@ const EditorAndBottomPanels: React.FC<EditorAndBottomPanelsProps> = ({
         px={4}
         py={2}
         transition='background-color 0.3s'
-      >
-        {/* BreadcrumbNavigation Component */}
-      </Box>
+      ></Box>
 
       {/* Tabs */}
       <Box
@@ -204,7 +201,6 @@ const EditorAndBottomPanels: React.FC<EditorAndBottomPanelsProps> = ({
           </Box>
         </Panel>
 
-        {/* Conditionally Render PanelResizeHandle and Bottom Panel */}
         {
           <>
             <PanelResizeHandle
@@ -224,11 +220,9 @@ const EditorAndBottomPanels: React.FC<EditorAndBottomPanelsProps> = ({
               style={{
                 display: isBottomPanelVisible ? 'flex' : 'none',
                 flexDirection: 'column',
-                backgroundColor: panelBgColor,
-                overflow: 'hidden'
+                backgroundColor: panelBgColor
               }}
             >
-              {/* Bottom Panels Content */}
               <Box h='100%' overflow='hidden'>
                 <Tabs
                   variant='enclosed'
@@ -244,48 +238,53 @@ const EditorAndBottomPanels: React.FC<EditorAndBottomPanelsProps> = ({
                     setActiveBottomPanel(panels[index])
                   }}
                 >
-                  <Flex alignItems='center'>
-                    <TabList>
-                      <ChakraTab>
-                        <Flex align='center'>
-                          <FaCode size={16} style={{ marginRight: '8px' }} />
-                          Output
-                        </Flex>
-                      </ChakraTab>
-                      <ChakraTab>
-                        <Flex align='center'>
-                          <FaImage size={16} style={{ marginRight: '8px' }} />
-                          Visual
-                        </Flex>
-                      </ChakraTab>
-                      <ChakraTab>
-                        <Flex align='center'>
-                          <FaTerminal
-                            size={16}
-                            style={{ marginRight: '8px' }}
-                          />
-                          Terminal
-                        </Flex>
-                      </ChakraTab>
-                      <ChakraTab>
-                        <Flex align='center'>
-                          <FaPython size={16} style={{ marginRight: '8px' }} />
-                          Python REPL
-                        </Flex>
-                      </ChakraTab>
-                    </TabList>
-                    <IconButton
-                      aria-label='Close Panel'
-                      icon={<CloseIcon />}
-                      size='sm'
-                      onClick={() => setIsBottomPanelVisible(false)}
-                      ml='auto'
-                      variant='ghost'
-                      _hover={{ bg: 'red.500', color: 'white' }}
-                      mt={1}
-                      mr={2}
-                    />
-                  </Flex>
+                  <Box overflowX='scroll' overflowY="hidden">
+                    <Flex alignItems='center'>
+                      <TabList>
+                        <ChakraTab>
+                          <Flex align='center'>
+                            <FaCode size={16} style={{ marginRight: '8px' }} />
+                            Output
+                          </Flex>
+                        </ChakraTab>
+                        <ChakraTab>
+                          <Flex align='center'>
+                            <FaImage size={16} style={{ marginRight: '8px' }} />
+                            Visual
+                          </Flex>
+                        </ChakraTab>
+                        <ChakraTab>
+                          <Flex align='center'>
+                            <FaTerminal
+                              size={16}
+                              style={{ marginRight: '8px' }}
+                            />
+                            Terminal
+                          </Flex>
+                        </ChakraTab>
+                        <ChakraTab>
+                          <Flex align='center'>
+                            <FaPython
+                              size={16}
+                              style={{ marginRight: '8px' }}
+                            />
+                            Python REPL
+                          </Flex>
+                        </ChakraTab>
+                      </TabList>
+                      <IconButton
+                        aria-label='Close Panel'
+                        icon={<CloseIcon />}
+                        size='sm'
+                        onClick={() => setIsBottomPanelVisible(false)}
+                        ml='auto'
+                        variant='ghost'
+                        _hover={{ bg: 'red.500', color: 'white' }}
+                        mt={1}
+                        mr={2}
+                      />
+                    </Flex>
+                  </Box>
                   <TabPanels>
                     <TabPanel p='2'>
                       {output ? (
@@ -365,7 +364,6 @@ const EditorAndBottomPanels: React.FC<EditorAndBottomPanelsProps> = ({
                               <br />
                               When a graph is rendered into the container, it
                               will show here
-                            
                             </Text>
                           )}
                         </Box>

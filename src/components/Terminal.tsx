@@ -47,7 +47,7 @@ const Terminal: React.FC = () => {
       try {
         await init({
           module: WasmModule,
-          sdkUrl: `${location.origin}/sdk/index.mjs`
+          sdkUrl: `${window.location.href}/sdk/index.mjs`
         })
         console.log('Wasmer SDK initialized')
 

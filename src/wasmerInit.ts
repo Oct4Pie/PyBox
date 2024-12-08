@@ -7,7 +7,7 @@ let wasmerInitialized = false;
 
 export const initializeWasmer = async () => {
   if (!wasmerInitialized) {
-    await await init({ module: WasmModule, sdkUrl: `${location.origin}/sdk/index.mjs` });
+    await await init({ module: WasmModule, sdkUrl: `${window.location.href}/sdk/index.mjs` });
     wasmerInitialized = true;
     console.log('Wasmer SDK initialized');
   }
